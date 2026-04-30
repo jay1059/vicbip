@@ -1,4 +1,6 @@
 FROM node:20-alpine
+RUN apk add --no-cache python3 py3-pip
+RUN pip3 install pandas requests beautifulsoup4 psycopg2-binary rapidfuzz --break-system-packages
 RUN npm install -g pnpm
 WORKDIR /app
 COPY pnpm-workspace.yaml .
