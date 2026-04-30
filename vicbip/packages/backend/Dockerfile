@@ -12,6 +12,8 @@ COPY packages/backend ./packages/backend
 COPY packages/frontend ./packages/frontend
 RUN cd packages/shared && pnpm run build || echo "no shared build"
 RUN cd packages/backend && pnpm run build
+ARG VITE_MAPBOX_TOKEN
+ENV VITE_MAPBOX_TOKEN=$VITE_MAPBOX_TOKEN
 RUN cd packages/frontend && pnpm run build
 RUN ls -la packages/backend/dist/
 EXPOSE 3001
