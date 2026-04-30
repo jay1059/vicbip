@@ -1,0 +1,13 @@
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.env
+*.local
+.DS_Store
+pnpm-approved-builds.json
+packages/pipeline/unmatched_projects.csv
+packages/pipeline/__pycache__/
+packages/pipeline/ingest/__pycache__/
+*.pyc
+*.pyo
