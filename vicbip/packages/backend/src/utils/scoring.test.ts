@@ -6,6 +6,7 @@ import {
   inferDesignLoadStd,
   computeRiskTier,
   inferOwnerCategory,
+  inferOwnerCategoryFromDtp,
 } from './scoring';
 
 describe('computeAgePts', () => {
@@ -126,6 +127,8 @@ describe('inferOwnerCategory', () => {
     expect(inferOwnerCategory('VicRoads')).toBe('state_govt');
     expect(inferOwnerCategory('Department of Transport and Planning')).toBe('state_govt');
     expect(inferOwnerCategory('DTP Victoria')).toBe('state_govt');
+    expect(inferOwnerCategory('Department of Transport')).toBe('state_govt');
+    expect(inferOwnerCategory('Transport for Victoria')).toBe('state_govt');
   });
 
   it('maps councils to local_govt', () => {
@@ -137,6 +140,8 @@ describe('inferOwnerCategory', () => {
     expect(inferOwnerCategory('Metro Trains Melbourne')).toBe('rail');
     expect(inferOwnerCategory('VicTrack')).toBe('rail');
     expect(inferOwnerCategory('V/Line')).toBe('rail');
+    expect(inferOwnerCategory('Metro Rail Authority')).toBe('rail');
+    expect(inferOwnerCategory('Train operator XYZ')).toBe('rail');
   });
 
   it('maps Transurban to toll_road', () => {
@@ -146,6 +151,7 @@ describe('inferOwnerCategory', () => {
   it('maps water/utility to utility', () => {
     expect(inferOwnerCategory('Melbourne Water')).toBe('utility');
     expect(inferOwnerCategory('AusNet Services')).toBe('utility');
+    expect(inferOwnerCategory('APA Group')).toBe('utility');
   });
 
   it('maps port authorities to port', () => {
@@ -154,5 +160,38 @@ describe('inferOwnerCategory', () => {
 
   it('returns other for unknown', () => {
     expect(inferOwnerCategory('Some Random Entity')).toBe('other');
+  });
+});
+
+describe('inferOwnerCategoryFromDtp', () => {
+  it('maps CD_STATE_CLASS=RA to rail', () => {
+    expect(inferOwnerCategoryFromDtp('RA', null)).toBe('rail');
+    expect(inferOwnerCategoryFromDtp('RA', 'ROAD OVER RAIL')).toBe('rail');
+  });
+
+  it('maps rail overpass bridge type to rail', () => {
+    expect(inferOwnerCategoryFromDtp('HF', 'RAIL OVER ROAD(RAIL OVERPASS)')).toBe('rail');
+    expect(inferOwnerCategoryFromDtp(null, 'rail overpass something')).toBe('rail');
+  });
+
+  it('maps HF (highway/freeway) to state_govt', () => {
+    expect(inferOwnerCategoryFromDtp('HF', 'ROAD OVER PERENNIAL WATERCOURSE')).toBe('state_govt');
+  });
+
+  it('maps MR (municipal road, still SN) to state_govt', () => {
+    expect(inferOwnerCategoryFromDtp('MR', 'ROAD OVER SEASONAL WATERCOURSE')).toBe('state_govt');
+  });
+
+  it('maps TR (tourist road) to state_govt', () => {
+    expect(inferOwnerCategoryFromDtp('TR', null)).toBe('state_govt');
+  });
+
+  it('maps FR (forest road) to state_govt', () => {
+    expect(inferOwnerCategoryFromDtp('FR', null)).toBe('state_govt');
+  });
+
+  it('maps NULL class to state_govt', () => {
+    expect(inferOwnerCategoryFromDtp(null, null)).toBe('state_govt');
+    expect(inferOwnerCategoryFromDtp('NULL', 'PEDESTRIAN BRIDGE')).toBe('state_govt');
   });
 });

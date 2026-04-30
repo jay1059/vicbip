@@ -10,6 +10,7 @@ import {
   computeRiskTier,
   inferDesignLoadStd,
   inferOwnerCategory,
+  inferOwnerCategoryFromDtp,
 } from '../utils/scoring';
 
 const router = Router();
@@ -351,11 +352,9 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
     const spanM = spanStr ? parseFloat(spanStr) : null;
     const validSpan = spanM !== null && !isNaN(spanM) && spanM > 0 ? spanM : null;
 
-    // Owner
-    const ownerName = pick(row,
-      'owner_name', 'owner', 'responsible_authority', 'authority',
-      'cd_state_class', 'region_phys',
-    ) || null;
+    // Owner — DTP CSV has no owner name column; derive from CD_STATE_CLASS + bridge type
+    const ownerName = pick(row, 'owner_name', 'owner', 'responsible_authority', 'authority') || null;
+    const cdStateClass = pick(row, 'cd_state_class') || null;
 
     // Coordinates — DTP uses LAT / LONGIT
     const latStr = pick(row, 'lat', 'latitude', 'y_coord', 'y');
@@ -395,7 +394,12 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
     const designLoadStd = inferDesignLoadStd(constructionYear);
     const sriScore = computeBasicSriScore(constructionYear);
     const riskTier = computeRiskTier(sriScore);
-    const ownerCategory = inferOwnerCategory(ownerName);
+    // Use DTP-specific mapping (CD_STATE_CLASS + bridge type) when no explicit owner name present
+    const ownerCategory = ownerName
+      ? inferOwnerCategory(ownerName)
+      : inferOwnerCategoryFromDtp(cdStateClass, bridgeTypeCsv);
+    // Synthesise a human-readable owner name for DTP records
+    const finalOwnerName = ownerName ?? (ownerCategory === 'rail' ? 'VicTrack / Rail' : 'VicRoads / DTP');
 
     try {
       const result = await pool.query(
@@ -427,7 +431,7 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
         RETURNING (xmax = 0) AS is_insert`,
         [
           finalBridgeId, displayName, roadName, bridgeTypeCsv || null, constructionYear,
-          validSpan, featureCrossed, ownerName, ownerCategory,
+          validSpan, featureCrossed, finalOwnerName, ownerCategory,
           lat, lon, designLoadStd, sriScore, riskTier,
         ],
       );
@@ -447,6 +451,81 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
     `db_error=${skipReasons.db_error}) total=${total}`,
   );
   res.json({ success: true, inserted, updated, skipped, skipReasons, total, csvHeaders: rawHeaders });
+});
+
+// GET /api/admin/remap-owners
+// Re-runs owner_category and owner_name mapping on all existing bridges
+// without re-downloading the CSV. Uses inferOwnerCategory for bridges
+// with an existing owner_name, and inferOwnerCategoryFromDtp for DTP
+// bridges that have no owner_name or where the current owner_name is
+// the synthetic 'VicRoads / DTP' or 'VicTrack / Rail' value.
+router.get('/remap-owners', async (_req: Request, res: Response): Promise<void> => {
+  console.log('[admin] remap-owners: loading all bridges…');
+
+  let bridges: Array<{
+    id: string;
+    owner_name: string | null;
+    owner_category: string | null;
+    bridge_type: string | null;
+    data_sources: string[] | null;
+  }>;
+
+  try {
+    const result = await pool.query(
+      `SELECT id, owner_name, owner_category, bridge_type, data_sources FROM bridges`,
+    );
+    bridges = result.rows as typeof bridges;
+  } catch (err) {
+    console.error('[admin] remap-owners: query failed', err);
+    res.status(500).json({ success: false, error: String(err) });
+    return;
+  }
+
+  console.log(`[admin] remap-owners: processing ${bridges.length} bridges`);
+
+  let updated = 0;
+  let unchanged = 0;
+  let errors = 0;
+
+  for (const b of bridges) {
+    const isDtp = (b.data_sources ?? []).includes('vicroads_dtp');
+    const syntheticOwners = ['VicRoads / DTP', 'VicTrack / Rail'];
+
+    let newCategory: string;
+    let newOwnerName: string | null = b.owner_name;
+
+    if (b.owner_name && !syntheticOwners.includes(b.owner_name)) {
+      // Real owner name — use text matching
+      newCategory = inferOwnerCategory(b.owner_name);
+    } else if (isDtp) {
+      // DTP bridge: use structural mapping (no owner column in CSV)
+      newCategory = inferOwnerCategoryFromDtp(null, b.bridge_type);
+      newOwnerName = newCategory === 'rail' ? 'VicTrack / Rail' : 'VicRoads / DTP';
+    } else {
+      newCategory = inferOwnerCategory(b.owner_name);
+    }
+
+    if (newCategory === b.owner_category && newOwnerName === b.owner_name) {
+      unchanged++;
+      continue;
+    }
+
+    try {
+      await pool.query(
+        `UPDATE bridges SET owner_category = $1, owner_name = $2 WHERE id = $3`,
+        [newCategory, newOwnerName, b.id],
+      );
+      updated++;
+    } catch (err) {
+      console.error(`[admin] remap-owners: update failed for id=${b.id}:`, err);
+      errors++;
+    }
+  }
+
+  console.log(
+    `[admin] remap-owners complete: updated=${updated} unchanged=${unchanged} errors=${errors}`,
+  );
+  res.json({ success: true, updated, unchanged, errors, total: bridges.length });
 });
 
 export default router;

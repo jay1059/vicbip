@@ -37,15 +37,21 @@ export function computeRiskTier(sri_score: number): RiskTier {
   return 'low';
 }
 
+/**
+ * Infer owner category from a free-text owner name.
+ * Used for OSM bridges, manual entries, and future CSV sources that include an owner field.
+ */
 export function inferOwnerCategory(ownerName: string | null): string {
   if (!ownerName) return 'other';
   const n = ownerName.toLowerCase();
 
   if (
-    n.includes('department of transport') ||
-    n.includes('dtp') ||
     n.includes('vicroads') ||
-    n.includes('vic roads')
+    n.includes('vic roads') ||
+    n.includes('department of transport') ||
+    n.includes('transport') ||
+    n.includes('dtp') ||
+    n.includes('department')
   ) {
     return 'state_govt';
   }
@@ -58,6 +64,8 @@ export function inferOwnerCategory(ownerName: string | null): string {
     return 'local_govt';
   }
   if (
+    n.includes('metro') ||
+    n.includes('train') ||
     n.includes('metro trains') ||
     n.includes('victrack') ||
     n.includes('v/line') ||
@@ -82,4 +90,31 @@ export function inferOwnerCategory(ownerName: string | null): string {
   }
 
   return 'other';
+}
+
+/**
+ * Infer owner category from DTP CSV fields.
+ *
+ * The DTP Road Bridges Register is the State Network (SN) register — every
+ * record is a VicRoads / DTP asset. There is no owner name column.
+ *
+ * Mapping:
+ *   CD_STATE_CLASS = 'RA'                    → rail  (rail-associated)
+ *   bridge type contains 'RAIL OVER ROAD'
+ *     or 'RAIL OVERPASS'                     → rail
+ *   Everything else on the SN register       → state_govt
+ */
+export function inferOwnerCategoryFromDtp(
+  cdStateClass: string | null,
+  bridgeType: string | null,
+): string {
+  const cls = (cdStateClass ?? '').trim().toUpperCase();
+  const bt = (bridgeType ?? '').toLowerCase();
+
+  if (cls === 'RA' || bt.includes('rail over road') || bt.includes('rail overpass')) {
+    return 'rail';
+  }
+
+  // All other SN records are VicRoads / DTP state government assets
+  return 'state_govt';
 }
