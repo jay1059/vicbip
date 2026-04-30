@@ -1,7 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { exec } from 'child_process';
 import path from 'path';
+import https from 'https';
+import http from 'http';
+import { parse } from 'csv-parse';
 import { pool } from '../db/pool';
+import {
+  computeBasicSriScore,
+  computeRiskTier,
+  inferDesignLoadStd,
+  inferOwnerCategory,
+} from '../utils/scoring';
 
 const router = Router();
 
@@ -172,6 +181,176 @@ router.get('/seed-sample', async (_req: Request, res: Response): Promise<void> =
     console.error('[admin] seed-sample failed:', err);
     res.status(500).json({ success: false, error: String(err) });
   }
+});
+
+// Fetch a URL following redirects, returning the full body as a Buffer
+function fetchUrl(url: string, redirectsLeft = 5): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    if (redirectsLeft === 0) {
+      reject(new Error('Too many redirects'));
+      return;
+    }
+    const mod = url.startsWith('https') ? https : http;
+    mod
+      .get(url, { headers: { 'User-Agent': 'VicBIP/1.0' } }, (res) => {
+        if (
+          res.statusCode &&
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location
+        ) {
+          resolve(fetchUrl(res.headers.location, redirectsLeft - 1));
+          return;
+        }
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`HTTP ${res.statusCode}`));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+        res.on('error', reject);
+      })
+      .on('error', reject);
+  });
+}
+
+const DTP_CSV_URL =
+  'https://opendata.transport.vic.gov.au/dataset/05efb8bc-677e-46f1-b1b1-fa5caff65067/' +
+  'resource/8d8b54fe-2515-4b1f-8601-a134b7a88d3c/download/road_bridges.csv';
+
+// GET /api/admin/seed-dtp
+router.get('/seed-dtp', async (_req: Request, res: Response): Promise<void> => {
+  console.log('[admin] seed-dtp: downloading DTP CSV…');
+
+  let csvBuffer: Buffer;
+  try {
+    csvBuffer = await fetchUrl(DTP_CSV_URL);
+  } catch (err) {
+    console.error('[admin] seed-dtp: download failed', err);
+    res.status(502).json({ success: false, error: `CSV download failed: ${String(err)}` });
+    return;
+  }
+
+  console.log(`[admin] seed-dtp: downloaded ${csvBuffer.length} bytes, parsing…`);
+
+  // Parse CSV — first pass to detect column names then normalise
+  let rows: Record<string, string>[];
+  try {
+    rows = await new Promise((resolve, reject) => {
+      parse(
+        csvBuffer,
+        { columns: true, skip_empty_lines: true, trim: true, bom: true },
+        (err, records: Record<string, string>[]) => {
+          if (err) reject(err);
+          else resolve(records);
+        },
+      );
+    });
+  } catch (err) {
+    console.error('[admin] seed-dtp: parse failed', err);
+    res.status(500).json({ success: false, error: `CSV parse failed: ${String(err)}` });
+    return;
+  }
+
+  console.log(`[admin] seed-dtp: parsed ${rows.length} rows`);
+  if (rows.length === 0) {
+    res.status(500).json({ success: false, error: 'CSV contained no rows' });
+    return;
+  }
+
+  // Normalise column names to lowercase_underscore
+  const normKey = (k: string) => k.toLowerCase().replace(/[\s()/]+/g, '_').replace(/_+$/, '');
+  const normRows = rows.map((r) => {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(r)) out[normKey(k)] = v;
+    return out;
+  });
+
+  // Map column names — try multiple candidates
+  const pick = (row: Record<string, string>, ...candidates: string[]): string => {
+    for (const c of candidates) {
+      if (row[c] !== undefined) return row[c] ?? '';
+    }
+    return '';
+  };
+
+  let inserted = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (const row of normRows) {
+    const bridgeId = pick(row, 'bridge_id', 'structure_id', 'asset_id', 'bms_id', 'id');
+    const name = pick(row, 'bridge_name', 'name', 'structure_name', 'asset_name') || 'Unknown';
+    const roadName = pick(row, 'road_name', 'road', 'street_name') || null;
+    const bridgeType = pick(row, 'bridge_type', 'structure_type', 'type') || null;
+    const yearStr = pick(row, 'construction_year', 'year_built', 'year_constructed', 'built');
+    const spanStr = pick(row, 'span_m', 'span__m_', 'span', 'total_span_m', 'total_span__m_');
+    const featureCrossed = pick(row, 'feature_crossed', 'feature', 'crossing') || null;
+    const ownerName = pick(row, 'owner_name', 'owner', 'responsible_authority', 'authority') || null;
+    const latStr = pick(row, 'latitude', 'lat', 'y', 'y_coord');
+    const lonStr = pick(row, 'longitude', 'lon', 'lng', 'x', 'x_coord');
+
+    const spanM = parseFloat(spanStr);
+    if (isNaN(spanM) || spanM < 20) { skipped++; continue; }
+    if (bridgeType && bridgeType.toLowerCase().includes('culvert')) { skipped++; continue; }
+
+    const lat = parseFloat(latStr);
+    const lon = parseFloat(lonStr);
+    if (isNaN(lat) || isNaN(lon)) { skipped++; continue; }
+
+    const year = yearStr ? parseInt(yearStr, 10) : null;
+    const constructionYear = (year && !isNaN(year)) ? year : null;
+    const designLoadStd = inferDesignLoadStd(constructionYear);
+    const sriScore = computeBasicSriScore(constructionYear);
+    const riskTier = computeRiskTier(sriScore);
+    const ownerCategory = inferOwnerCategory(ownerName);
+    const finalBridgeId = bridgeId || null;
+
+    try {
+      const result = await pool.query(
+        `INSERT INTO bridges (
+          bridge_id, name, road_name, bridge_type, construction_year,
+          span_m, feature_crossed, owner_name, owner_category,
+          latitude, longitude, design_load_std, sri_score, risk_tier,
+          freyssinet_works, data_sources, last_ingested
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+          false, ARRAY['vicroads_dtp'], NOW()
+        )
+        ON CONFLICT (bridge_id) DO UPDATE SET
+          name              = EXCLUDED.name,
+          road_name         = EXCLUDED.road_name,
+          bridge_type       = EXCLUDED.bridge_type,
+          construction_year = EXCLUDED.construction_year,
+          span_m            = EXCLUDED.span_m,
+          feature_crossed   = EXCLUDED.feature_crossed,
+          owner_name        = EXCLUDED.owner_name,
+          owner_category    = EXCLUDED.owner_category,
+          latitude          = EXCLUDED.latitude,
+          longitude         = EXCLUDED.longitude,
+          design_load_std   = EXCLUDED.design_load_std,
+          sri_score         = EXCLUDED.sri_score,
+          risk_tier         = EXCLUDED.risk_tier,
+          last_ingested     = NOW()
+        RETURNING (xmax = 0) AS is_insert`,
+        [
+          finalBridgeId, name, roadName, bridgeType, constructionYear,
+          spanM, featureCrossed, ownerName, ownerCategory,
+          lat, lon, designLoadStd, sriScore, riskTier,
+        ],
+      );
+      const isInsert = (result.rows[0] as { is_insert: boolean } | undefined)?.is_insert;
+      if (isInsert) inserted++; else updated++;
+    } catch (err) {
+      console.warn(`[admin] seed-dtp: skipped row name="${name}":`, String(err));
+      skipped++;
+    }
+  }
+
+  const total = normRows.length;
+  console.log(`[admin] seed-dtp complete: inserted=${inserted} updated=${updated} skipped=${skipped} total=${total}`);
+  res.json({ success: true, inserted, updated, skipped, total });
 });
 
 export default router;

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useQuery } from '@tanstack/react-query';
@@ -22,6 +22,10 @@ export function MapView(): React.ReactElement {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const tooltipRef = useRef<mapboxgl.Popup | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const pulseRadiusRef = useRef<number>(8);
+  const pulseDirectionRef = useRef<number>(1);
+
   const { setSelectedBridgeId, isDarkMode, isHeatmapEnabled, toggleHeatmap } = useAppStore();
 
   const filterState = useFilterStore();
@@ -35,6 +39,8 @@ export function MapView(): React.ReactElement {
     q: filterState.q,
     freyssinet_only: filterState.freyssinet_only,
     exclude_freyssinet: filterState.exclude_freyssinet,
+    sn_only: filterState.sn_only,
+    has_tenders: filterState.has_tenders,
   };
 
   const { data: geojson, error } = useQuery({
@@ -80,6 +86,7 @@ export function MapView(): React.ReactElement {
         data: { type: 'FeatureCollection', features: [] },
       });
 
+      // Heatmap layer (hidden by default)
       map.addLayer({
         id: 'bridge-heatmap',
         type: 'heatmap',
@@ -89,9 +96,7 @@ export function MapView(): React.ReactElement {
           'heatmap-weight': ['interpolate', ['linear'], ['get', 'sri_score'], 0, 0, 100, 1],
           'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, 9, 3],
           'heatmap-color': [
-            'interpolate',
-            ['linear'],
-            ['heatmap-density'],
+            'interpolate', ['linear'], ['heatmap-density'],
             0, 'rgba(33,102,172,0)',
             0.2, 'rgb(103,169,207)',
             0.4, 'rgb(209,229,240)',
@@ -104,107 +109,141 @@ export function MapView(): React.ReactElement {
         },
       });
 
+      // Non-tender bridge points
       map.addLayer({
         id: 'bridge-points',
         type: 'circle',
         source: 'bridges',
+        filter: ['!=', ['get', 'has_tenders'], true],
         paint: {
           'circle-color': RISK_COLOR_MATCH,
           'circle-radius': [
-            'interpolate',
-            ['linear'],
+            'interpolate', ['linear'],
             ['coalesce', ['get', 'span_m'], 30],
-            20, 5,
-            100, 9,
-            500, 14,
+            20, 5, 100, 9, 500, 14,
           ],
-          'circle-stroke-width': 1.5,
+          // SN bridges: thicker white stroke
+          'circle-stroke-width': [
+            'case', ['get', 'is_sn'], 2.5, 1.5,
+          ],
           'circle-stroke-color': '#ffffff',
           'circle-opacity': 0.85,
         },
       });
 
+      // Tender bridge points — separate layer so we can animate radius
+      map.addLayer({
+        id: 'bridge-points-tender',
+        type: 'circle',
+        source: 'bridges',
+        filter: ['==', ['get', 'has_tenders'], true],
+        paint: {
+          'circle-color': RISK_COLOR_MATCH,
+          'circle-radius': 10,
+          'circle-stroke-width': [
+            'case', ['get', 'is_sn'], 2.5, 1.5,
+          ],
+          'circle-stroke-color': '#E8731A',
+          'circle-opacity': 0.9,
+        },
+      });
+
       mapRef.current = map;
+
+      // Start pulse animation for tender bridges
+      const pulse = () => {
+        if (!map.getLayer('bridge-points-tender')) return;
+        pulseRadiusRef.current += pulseDirectionRef.current * 0.15;
+        if (pulseRadiusRef.current >= 14) pulseDirectionRef.current = -1;
+        if (pulseRadiusRef.current <= 8) pulseDirectionRef.current = 1;
+        map.setPaintProperty(
+          'bridge-points-tender',
+          'circle-radius',
+          pulseRadiusRef.current,
+        );
+        rafRef.current = requestAnimationFrame(pulse);
+      };
+      rafRef.current = requestAnimationFrame(pulse);
     });
 
-    map.on('mousemove', 'bridge-points', (e) => {
+    // Shared hover/click handlers for both point layers
+    const handleMouseMove = (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
       if (!e.features || e.features.length === 0) return;
       map.getCanvas().style.cursor = 'pointer';
 
       const feature = e.features[0];
       if (!feature) return;
-
       const props = feature.properties as {
         name: string;
         sri_score: number;
         risk_tier: string;
-        owner_name: string;
+        is_sn: boolean;
+        has_tenders: boolean;
       };
 
       tooltipRef.current
         ?.setLngLat(e.lngLat)
         .setHTML(
           `<div class="p-2 text-sm">
-            <div class="font-semibold">${props.name}</div>
+            <div class="font-semibold">${props.name}${props.is_sn ? ' <span class="text-blue-600 text-xs">SN</span>' : ''}</div>
             <div class="text-slate-500">SRI: <span class="font-medium">${props.sri_score?.toFixed(1)}</span></div>
             <div class="text-slate-500 capitalize">${props.risk_tier ?? 'Unknown'} risk</div>
+            ${props.has_tenders ? '<div class="text-orange-500 text-xs font-medium mt-0.5">● Tender activity</div>' : ''}
           </div>`,
         )
         .addTo(map);
-    });
+    };
 
-    map.on('mouseleave', 'bridge-points', () => {
+    const handleMouseLeave = () => {
       map.getCanvas().style.cursor = '';
       tooltipRef.current?.remove();
-    });
+    };
 
-    map.on('click', 'bridge-points', (e) => {
+    const handleClick = (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
       if (!e.features || e.features.length === 0) return;
       const feature = e.features[0];
       if (!feature) return;
       const props = feature.properties as { id: string };
       setSelectedBridgeId(props.id);
-    });
+    };
+
+    for (const layerId of ['bridge-points', 'bridge-points-tender']) {
+      map.on('mousemove', layerId, handleMouseMove);
+      map.on('mouseleave', layerId, handleMouseLeave);
+      map.on('click', layerId, handleClick);
+    }
 
     return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       tooltipRef.current?.remove();
       map.remove();
       mapRef.current = null;
     };
   }, [mapStyle]);
 
-  // Update map style on dark mode change
-  useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.setStyle(mapStyle);
-    }
-  }, [mapStyle]);
-
   // Update GeoJSON data when filters/data change
   useEffect(() => {
     if (!mapRef.current || !geojson) return;
     const source = mapRef.current.getSource('bridges') as mapboxgl.GeoJSONSource | undefined;
-    if (source) {
-      source.setData(geojson);
-    }
+    source?.setData(geojson);
   }, [geojson]);
 
-  // Toggle heatmap
+  // Toggle heatmap visibility
   useEffect(() => {
-    if (!mapRef.current) return;
     const map = mapRef.current;
+    if (!map) return;
     if (!map.getLayer('bridge-heatmap')) return;
 
-    map.setLayoutProperty(
-      'bridge-heatmap',
-      'visibility',
-      isHeatmapEnabled ? 'visible' : 'none',
-    );
-    map.setLayoutProperty(
-      'bridge-points',
-      'visibility',
-      isHeatmapEnabled ? 'none' : 'visible',
-    );
+    const showHeat = isHeatmapEnabled ? 'visible' : 'none';
+    const showPoints = isHeatmapEnabled ? 'none' : 'visible';
+    map.setLayoutProperty('bridge-heatmap', 'visibility', showHeat);
+    map.setLayoutProperty('bridge-points', 'visibility', showPoints);
+    map.setLayoutProperty('bridge-points-tender', 'visibility', showPoints);
+
+    // Pause/resume pulse RAF
+    if (isHeatmapEnabled) {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    }
   }, [isHeatmapEnabled]);
 
   return (
@@ -216,7 +255,11 @@ export function MapView(): React.ReactElement {
               Mapbox token not configured
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Add <code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">VITE_MAPBOX_TOKEN</code> to your .env file
+              Add{' '}
+              <code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">
+                VITE_MAPBOX_TOKEN
+              </code>{' '}
+              to your .env file
             </p>
           </div>
         </div>
@@ -261,14 +304,18 @@ export function MapView(): React.ReactElement {
           { label: 'Low', color: '#16A34A' },
         ].map(({ label, color }) => (
           <div key={label} className="flex items-center gap-2 mb-1">
-            <span
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: color }}
-              aria-hidden="true"
-            />
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
             <span className="text-xs text-slate-700 dark:text-slate-300">{label}</span>
           </div>
         ))}
+        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <span className="w-3 h-3 rounded-full border-2 border-[#E8731A] bg-slate-400" aria-hidden="true" />
+          <span className="text-xs text-slate-500 dark:text-slate-400">Tender active</span>
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="w-3 h-3 rounded-full border-2 border-white bg-slate-400 ring-1 ring-slate-400" aria-hidden="true" />
+          <span className="text-xs text-slate-500 dark:text-slate-400">SN bridge</span>
+        </div>
       </div>
     </div>
   );

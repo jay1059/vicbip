@@ -98,6 +98,8 @@ export interface BridgeFeatureProperties {
   sri_score: number;
   risk_tier: RiskTier | null;
   freyssinet_works: boolean;
+  is_sn: boolean;
+  has_tenders: boolean;
 }
 
 export interface BridgeGeoJSONFeature {
@@ -150,4 +152,6 @@ export interface BridgeFilters {
   q?: string;
   freyssinet_only?: boolean;
   exclude_freyssinet?: boolean;
+  sn_only?: boolean;
+  has_tenders?: boolean;
 }

@@ -106,6 +106,13 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
   const lat = bridge.latitude != null ? bridge.latitude.toFixed(5) : 'N/A';
   const lng = bridge.longitude != null ? bridge.longitude.toFixed(5) : 'N/A';
 
+  const cutoff3y = new Date();
+  cutoff3y.setFullYear(cutoff3y.getFullYear() - 3);
+  const hasRecentTender = bridge.tenders.some((t) => {
+    if (!t.published_date) return false;
+    return new Date(t.published_date) >= cutoff3y;
+  });
+
   const ownerColor = bridge.owner_category
     ? OWNER_COLORS[bridge.owner_category] ?? '#6B7280'
     : '#6B7280';
@@ -125,6 +132,16 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
+      {/* Tender active badge */}
+      {hasRecentTender && (
+        <div className="px-4 pt-3 pb-0">
+          <span className="inline-flex items-center gap-1.5 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" aria-hidden="true" />
+            Tender Active
+          </span>
+        </div>
+      )}
+
       {/* Section A — Identity */}
       <div className="p-4 border-b border-slate-200 dark:border-slate-700">
         <Section title="Identity">

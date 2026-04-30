@@ -25,6 +25,8 @@ function buildFilterParams(filters: BridgeFilters): URLSearchParams {
   if (filters.q) params.set('q', filters.q);
   if (filters.freyssinet_only) params.set('freyssinet_only', 'true');
   if (filters.exclude_freyssinet) params.set('exclude_freyssinet', 'true');
+  if (filters.sn_only) params.set('sn_only', 'true');
+  if (filters.has_tenders) params.set('has_tenders', 'true');
 
   return params;
 }

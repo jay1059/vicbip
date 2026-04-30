@@ -50,6 +50,14 @@ const BridgeFiltersSchema = z.object({
     .string()
     .optional()
     .transform((v) => v === 'true'),
+  sn_only: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
+  has_tenders: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
 });
 
 const ExportFiltersSchema = BridgeFiltersSchema.extend({
@@ -117,6 +125,16 @@ function buildWhere(filters: z.infer<typeof BridgeFiltersSchema>): {
     conditions.push('freyssinet_works = false');
   }
 
+  if (filters.sn_only) {
+    conditions.push("bridge_id ILIKE 'SN%'");
+  }
+
+  if (filters.has_tenders) {
+    conditions.push(
+      'EXISTS (SELECT 1 FROM bridge_tenders bt WHERE bt.bridge_id = bridges.id)',
+    );
+  }
+
   return {
     where: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
     params,
@@ -137,12 +155,14 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await pool.query(
       `SELECT
-        id, name, road_name, bridge_type, construction_year, span_m,
-        owner_name, owner_category, sri_score, risk_tier, freyssinet_works,
-        latitude, longitude
-       FROM bridges
+        b.id, b.name, b.road_name, b.bridge_type, b.construction_year, b.span_m,
+        b.owner_name, b.owner_category, b.sri_score, b.risk_tier, b.freyssinet_works,
+        b.latitude, b.longitude,
+        (b.bridge_id ILIKE 'SN%') AS is_sn,
+        EXISTS (SELECT 1 FROM bridge_tenders bt WHERE bt.bridge_id = b.id) AS has_tenders
+       FROM bridges b
        ${where}
-       ORDER BY sri_score DESC`,
+       ORDER BY b.sri_score DESC`,
       params,
     );
 
@@ -166,6 +186,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
           sri_score: row.sri_score as number,
           risk_tier: row.risk_tier as RiskTier | null,
           freyssinet_works: row.freyssinet_works as boolean,
+          is_sn: row.is_sn as boolean,
+          has_tenders: row.has_tenders as boolean,
         },
       })),
     };

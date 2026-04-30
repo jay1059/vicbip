@@ -220,6 +220,47 @@ export function FilterPanel(): React.ReactElement {
           />
         </div>
 
+        {/* SN Network filter */}
+        <fieldset>
+          <legend className="section-header w-full">State Network</legend>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filters.sn_only ?? false}
+                onChange={(e) => filters.setSnOnly(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              <span className="text-sm text-slate-700 dark:text-slate-300">
+                State Network (SN) only
+              </span>
+            </label>
+            {filters.sn_only && (
+              <span className="text-xs bg-brand-blue/10 text-brand-blue dark:bg-blue-900/30 dark:text-blue-300 px-2 py-0.5 rounded-full font-medium">
+                {resultCount} SN bridges
+              </span>
+            )}
+          </div>
+        </fieldset>
+
+        {/* Tender activity filter */}
+        <fieldset>
+          <legend className="section-header w-full">Tender Activity</legend>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filters.has_tenders ?? false}
+                onChange={(e) => filters.setHasTenders(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              <span className="text-sm text-slate-700 dark:text-slate-300">
+                Has tender activity
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
         {/* Freyssinet toggles */}
         <fieldset>
           <legend className="section-header w-full">Freyssinet Works</legend>
