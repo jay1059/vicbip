@@ -528,4 +528,21 @@ router.get('/remap-owners', async (_req: Request, res: Response): Promise<void> 
   res.json({ success: true, updated, unchanged, errors, total: bridges.length });
 });
 
+// GET /api/admin/owner-diagnosis — temporary diagnostic
+router.get('/owner-diagnosis', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await pool.query(
+      `SELECT owner_name, owner_category, COUNT(*) AS count
+       FROM bridges
+       GROUP BY owner_name, owner_category
+       ORDER BY count DESC
+       LIMIT 30`,
+    );
+    res.json({ success: true, rows: result.rows });
+  } catch (err) {
+    console.error('[admin] owner-diagnosis failed:', err);
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
 export default router;
