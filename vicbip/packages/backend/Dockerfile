@@ -1,24 +1,15 @@
 FROM node:20-alpine
-
 RUN npm install -g pnpm
-
 WORKDIR /app
-
-# Copy workspace config
-COPY pnpm-workspace.yaml ./
-COPY package.json ./
-
-# Copy all packages
+COPY pnpm-workspace.yaml .
+COPY package.json .
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/backend/package.json ./packages/backend/
+RUN pnpm install
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
-
-# Install dependencies
-RUN pnpm install
-
-# Build shared first, then backend
-RUN pnpm --filter shared build || true
-RUN pnpm --filter backend run build
-
+RUN cd packages/shared && pnpm run build || echo "no shared build"
+RUN cd packages/backend && pnpm run build
+RUN ls -la packages/backend/dist/
 EXPOSE 3001
-
 CMD ["node", "packages/backend/dist/index.js"]

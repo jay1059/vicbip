@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "ts-node-dev --respawn --transpile-only --project tsconfig.dev.json src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "node-pg-migrate up --database-url-var DATABASE_URL --migrations-dir src/migrations --migration-filename-format utc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --project tsconfig.dev.json",
     "test": "vitest run"
   },
   "dependencies": {
