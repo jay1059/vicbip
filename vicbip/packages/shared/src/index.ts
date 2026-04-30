@@ -26,7 +26,8 @@ export interface Bridge {
   feature_crossed: string | null;
   owner_name: string | null;
   owner_category: OwnerCategory | null;
-  location: GeoJSONPoint;
+  latitude: number;
+  longitude: number;
   design_load_std: string | null;
   sri_score: number;
   risk_tier: RiskTier | null;

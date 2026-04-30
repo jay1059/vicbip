@@ -231,12 +231,13 @@ def main() -> None:
                         INSERT INTO bridges (
                             bridge_id, name, road_name, bridge_type, construction_year,
                             span_m, feature_crossed, owner_name, owner_category,
-                            location, design_load_std, sri_score, risk_tier,
+                            latitude, longitude,
+                            design_load_std, sri_score, risk_tier,
                             data_sources, last_ingested
                         ) VALUES (
                             %s, %s, %s, %s, %s,
                             %s, %s, %s, %s,
-                            ST_SetSRID(ST_MakePoint(%s, %s), 4326),
+                            %s, %s,
                             %s, %s, %s,
                             ARRAY['vicroads_dtp'], NOW()
                         )
@@ -249,7 +250,8 @@ def main() -> None:
                             feature_crossed = EXCLUDED.feature_crossed,
                             owner_name = EXCLUDED.owner_name,
                             owner_category = EXCLUDED.owner_category,
-                            location = EXCLUDED.location,
+                            latitude = EXCLUDED.latitude,
+                            longitude = EXCLUDED.longitude,
                             design_load_std = EXCLUDED.design_load_std,
                             sri_score = EXCLUDED.sri_score,
                             risk_tier = EXCLUDED.risk_tier,
@@ -260,7 +262,7 @@ def main() -> None:
                         (
                             bridge_id, name, road_name, bridge_type, construction_year,
                             span_m, feature_crossed, owner_name, owner_category,
-                            longitude, latitude,
+                            latitude, longitude,
                             design_load_std, sri_score, risk_tier,
                         )
                     )

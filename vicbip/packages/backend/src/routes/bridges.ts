@@ -56,15 +56,11 @@ const ExportFiltersSchema = BridgeFiltersSchema.extend({
   format: z.enum(['csv']).optional(),
 });
 
-// GET /api/bridges
-router.get('/', async (req: Request, res: Response): Promise<void> => {
-  const parsed = BridgeFiltersSchema.safeParse(req.query);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid query parameters', details: parsed.error.format() });
-    return;
-  }
-
-  const filters = parsed.data;
+function buildWhere(filters: z.infer<typeof BridgeFiltersSchema>): {
+  where: string;
+  params: unknown[];
+  nextIdx: number;
+} {
   const conditions: string[] = [];
   const params: unknown[] = [];
   let idx = 1;
@@ -121,14 +117,29 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     conditions.push('freyssinet_works = false');
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  return {
+    where: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
+    params,
+    nextIdx: idx,
+  };
+}
+
+// GET /api/bridges
+router.get('/', async (req: Request, res: Response): Promise<void> => {
+  const parsed = BridgeFiltersSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid query parameters', details: parsed.error.format() });
+    return;
+  }
+
+  const { where, params } = buildWhere(parsed.data);
 
   try {
     const result = await pool.query(
       `SELECT
         id, name, road_name, bridge_type, construction_year, span_m,
         owner_name, owner_category, sri_score, risk_tier, freyssinet_works,
-        ST_AsGeoJSON(location)::json AS geometry
+        latitude, longitude
        FROM bridges
        ${where}
        ORDER BY sri_score DESC`,
@@ -139,7 +150,10 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       type: 'FeatureCollection',
       features: result.rows.map((row) => ({
         type: 'Feature',
-        geometry: row.geometry as { type: 'Point'; coordinates: [number, number] },
+        geometry: {
+          type: 'Point',
+          coordinates: [row.longitude as number, row.latitude as number],
+        },
         properties: {
           id: row.id as string,
           name: row.name as string,
@@ -250,71 +264,14 @@ router.get('/export', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const filters = parsed.data;
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-  let idx = 1;
-
-  if (filters.owner_category && filters.owner_category.length > 0) {
-    conditions.push(`owner_category = ANY($${idx}::text[])`);
-    params.push(filters.owner_category);
-    idx++;
-  }
-
-  if (filters.risk_tier && filters.risk_tier.length > 0) {
-    conditions.push(`risk_tier = ANY($${idx}::text[])`);
-    params.push(filters.risk_tier);
-    idx++;
-  }
-
-  if (filters.min_year !== undefined) {
-    conditions.push(`construction_year >= $${idx}`);
-    params.push(filters.min_year);
-    idx++;
-  }
-
-  if (filters.max_year !== undefined) {
-    conditions.push(`construction_year <= $${idx}`);
-    params.push(filters.max_year);
-    idx++;
-  }
-
-  if (filters.min_span !== undefined) {
-    conditions.push(`span_m >= $${idx}`);
-    params.push(filters.min_span);
-    idx++;
-  }
-
-  if (filters.max_span !== undefined) {
-    conditions.push(`span_m <= $${idx}`);
-    params.push(filters.max_span);
-    idx++;
-  }
-
-  if (filters.q) {
-    conditions.push(
-      `(name ILIKE $${idx} OR road_name ILIKE $${idx} OR owner_name ILIKE $${idx})`,
-    );
-    params.push(`%${filters.q}%`);
-    idx++;
-  }
-
-  if (filters.freyssinet_only) {
-    conditions.push('freyssinet_works = true');
-  }
-
-  if (filters.exclude_freyssinet) {
-    conditions.push('freyssinet_works = false');
-  }
-
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const { where, params } = buildWhere(parsed.data);
 
   try {
     const result = await pool.query(
       `SELECT
         name, road_name, owner_name, owner_category, construction_year,
         span_m, sri_score, risk_tier, bridge_type,
-        ST_Y(location) AS latitude, ST_X(location) AS longitude,
+        latitude, longitude,
         freyssinet_works
        FROM bridges ${where} ORDER BY sri_score DESC`,
       params,
@@ -378,10 +335,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const [bridgeRes, trafficRes, eventsRes, tendersRes, intelligenceRes] =
       await Promise.all([
-        pool.query(
-          `SELECT *, ST_AsGeoJSON(location)::json AS geometry FROM bridges WHERE id = $1`,
-          [id],
-        ),
+        pool.query(`SELECT * FROM bridges WHERE id = $1`, [id]),
         pool.query(
           `SELECT * FROM bridge_traffic WHERE bridge_id = $1 ORDER BY year DESC LIMIT 1`,
           [id],
@@ -431,7 +385,8 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       feature_crossed: bridge['feature_crossed'] as string | null,
       owner_name: bridge['owner_name'] as string | null,
       owner_category: bridge['owner_category'] as OwnerCategory | null,
-      location: bridge['geometry'] as { type: 'Point'; coordinates: [number, number] },
+      latitude: bridge['latitude'] as number,
+      longitude: bridge['longitude'] as number,
       design_load_std: bridge['design_load_std'] as string | null,
       sri_score: bridge['sri_score'] as number,
       risk_tier: bridge['risk_tier'] as RiskTier | null,

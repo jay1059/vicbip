@@ -1,2 +1,1 @@
-CREATE EXTENSION IF NOT EXISTS postgis;
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- No extensions required; gen_random_uuid() is built into PostgreSQL 13+

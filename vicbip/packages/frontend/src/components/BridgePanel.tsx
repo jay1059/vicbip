@@ -103,9 +103,8 @@ function Section({
 function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactElement {
   const [scoreExpanded, setScoreExpanded] = useState(false);
 
-  const coords = bridge.location?.coordinates;
-  const lat = coords ? coords[1]?.toFixed(5) : 'N/A';
-  const lng = coords ? coords[0]?.toFixed(5) : 'N/A';
+  const lat = bridge.latitude != null ? bridge.latitude.toFixed(5) : 'N/A';
+  const lng = bridge.longitude != null ? bridge.longitude.toFixed(5) : 'N/A';
 
   const ownerColor = bridge.owner_category
     ? OWNER_COLORS[bridge.owner_category] ?? '#6B7280'

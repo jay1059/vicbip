@@ -130,18 +130,17 @@ def main() -> None:
                 cur.execute(
                     """
                     INSERT INTO bridges (
-                        bridge_id, name, location, owner_category,
+                        bridge_id, name, latitude, longitude, owner_category,
                         data_sources, last_ingested, span_m, bridge_type
                     ) VALUES (
-                        %s, %s,
-                        ST_SetSRID(ST_MakePoint(%s, %s), 4326),
+                        %s, %s, %s, %s,
                         'other',
                         ARRAY['osm'], NOW(),
                         %s, %s
                     )
                     ON CONFLICT (bridge_id) DO NOTHING
                     """,
-                    (bridge_id, name, lon, lat, length_m, bridge_type),
+                    (bridge_id, name, lat, lon, length_m, bridge_type),
                 )
             conn.commit()
 

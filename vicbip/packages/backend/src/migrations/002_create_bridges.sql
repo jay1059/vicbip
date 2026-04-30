@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS bridges (
   owner_name       TEXT,
   owner_category   TEXT CHECK (owner_category IN
     ('state_govt','local_govt','rail','toll_road','utility','port','other')),
-  location         GEOMETRY(POINT, 4326) NOT NULL,
+  latitude         FLOAT NOT NULL,
+  longitude        FLOAT NOT NULL,
   design_load_std  TEXT,
   sri_score        FLOAT DEFAULT 30,
   risk_tier        TEXT CHECK (risk_tier IN ('critical','high','moderate','low')),
@@ -21,6 +22,6 @@ CREATE TABLE IF NOT EXISTS bridges (
   last_ingested    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS bridges_location_idx ON bridges USING GIST (location);
+CREATE INDEX IF NOT EXISTS bridges_latlng_idx ON bridges (latitude, longitude);
 CREATE INDEX IF NOT EXISTS bridges_risk_idx ON bridges (risk_tier, sri_score DESC);
 CREATE INDEX IF NOT EXISTS bridges_owner_idx ON bridges (owner_category);
