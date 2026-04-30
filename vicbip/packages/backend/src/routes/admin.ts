@@ -454,78 +454,137 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /api/admin/remap-owners
-// Re-runs owner_category and owner_name mapping on all existing bridges
-// without re-downloading the CSV. Uses inferOwnerCategory for bridges
-// with an existing owner_name, and inferOwnerCategoryFromDtp for DTP
-// bridges that have no owner_name or where the current owner_name is
-// the synthetic 'VicRoads / DTP' or 'VicTrack / Rail' value.
+// Fixes owner_name and owner_category for all bridges using targeted bulk SQL UPDATEs.
+// Designed around the actual values present in the DTP CSV:
+//   HF/MR/TR/RA/FR/LH/CH/SH = road class codes (not owner names) → VicRoads / DTP
+//   'NULL' string or real NULL → Unknown / other
+//   VicTrack/Rail strings → rail
+//   Standard text matching for councils, Transurban, etc.
 router.get('/remap-owners', async (_req: Request, res: Response): Promise<void> => {
-  console.log('[admin] remap-owners: loading all bridges…');
+  console.log('[admin] remap-owners: running bulk SQL updates…');
 
-  let bridges: Array<{
-    id: string;
-    owner_name: string | null;
-    owner_category: string | null;
-    bridge_type: string | null;
-    data_sources: string[] | null;
-  }>;
+  // Road class codes written into owner_name by the DTP ingest — these are
+  // CD_STATE_CLASS values, not owner names. All map to VicRoads / state_govt.
+  const ROAD_CLASS_CODES = ['HF', 'MR', 'TR', 'RA', 'FR', 'LH', 'CH', 'SH'];
 
-  try {
-    const result = await pool.query(
-      `SELECT id, owner_name, owner_category, bridge_type, data_sources FROM bridges`,
-    );
-    bridges = result.rows as typeof bridges;
-  } catch (err) {
-    console.error('[admin] remap-owners: query failed', err);
-    res.status(500).json({ success: false, error: String(err) });
-    return;
-  }
+  const steps: Array<{ label: string; sql: string; params?: unknown[] }> = [
+    // 1. Road class codes → state_govt / VicRoads / DTP
+    {
+      label: 'road class codes → state_govt',
+      sql: `UPDATE bridges
+            SET owner_category = 'state_govt', owner_name = 'VicRoads / DTP'
+            WHERE owner_name = ANY($1::text[])`,
+      params: [ROAD_CLASS_CODES],
+    },
+    // 2. 'NULL' string or actual NULL → other / Unknown
+    {
+      label: '"NULL" string or null → other',
+      sql: `UPDATE bridges
+            SET owner_category = 'other', owner_name = 'Unknown'
+            WHERE owner_name = 'NULL' OR owner_name IS NULL`,
+    },
+    // 3. Rail / VicTrack strings → rail (keep owner_name as-is)
+    {
+      label: 'VicTrack/Rail → rail',
+      sql: `UPDATE bridges
+            SET owner_category = 'rail'
+            WHERE owner_name ILIKE '%VicTrack%'
+               OR owner_name ILIKE '%Rail%'
+               OR owner_name ILIKE '%Metro Train%'
+               OR owner_name ILIKE '%V/Line%'
+               OR owner_name = 'VicTrack / Rail'`,
+    },
+    // 4. VicRoads / DTP variants → state_govt
+    {
+      label: 'VicRoads/DTP variants → state_govt',
+      sql: `UPDATE bridges
+            SET owner_category = 'state_govt', owner_name = 'VicRoads / DTP'
+            WHERE (
+              owner_name ILIKE '%VicRoads%'
+              OR owner_name ILIKE '%Vic Roads%'
+              OR owner_name ILIKE '%Department of Transport%'
+              OR owner_name ILIKE '%DTP%'
+              OR owner_name = 'VicRoads / DTP'
+            ) AND owner_category != 'rail'`,
+    },
+    // 5. Council / Shire / City of → local_govt
+    {
+      label: 'councils → local_govt',
+      sql: `UPDATE bridges
+            SET owner_category = 'local_govt'
+            WHERE owner_name ILIKE '%council%'
+               OR owner_name ILIKE '%shire%'
+               OR owner_name ILIKE '%city of%'
+               OR owner_name ILIKE '%borough%'`,
+    },
+    // 6. Transurban → toll_road
+    {
+      label: 'Transurban → toll_road',
+      sql: `UPDATE bridges
+            SET owner_category = 'toll_road'
+            WHERE owner_name ILIKE '%transurban%'`,
+    },
+    // 7. Water / AusNet / APA → utility
+    {
+      label: 'water/utility → utility',
+      sql: `UPDATE bridges
+            SET owner_category = 'utility'
+            WHERE owner_name ILIKE '%water%'
+               OR owner_name ILIKE '%ausnet%'
+               OR owner_name ILIKE '%apa%'
+               OR owner_name ILIKE '%jemena%'`,
+    },
+    // 8. Port → port
+    {
+      label: 'port → port',
+      sql: `UPDATE bridges
+            SET owner_category = 'port'
+            WHERE owner_name ILIKE '%port%'`,
+    },
+    // 9. Anything still null → Unknown / other (safety net)
+    {
+      label: 'remaining nulls → other',
+      sql: `UPDATE bridges
+            SET owner_category = 'other', owner_name = 'Unknown'
+            WHERE owner_category IS NULL OR owner_name IS NULL`,
+    },
+  ];
 
-  console.log(`[admin] remap-owners: processing ${bridges.length} bridges`);
-
-  let updated = 0;
-  let unchanged = 0;
+  const results: Array<{ label: string; rowCount: number }> = [];
   let errors = 0;
 
-  for (const b of bridges) {
-    const isDtp = (b.data_sources ?? []).includes('vicroads_dtp');
-    const syntheticOwners = ['VicRoads / DTP', 'VicTrack / Rail'];
-
-    let newCategory: string;
-    let newOwnerName: string | null = b.owner_name;
-
-    if (b.owner_name && !syntheticOwners.includes(b.owner_name)) {
-      // Real owner name — use text matching
-      newCategory = inferOwnerCategory(b.owner_name);
-    } else if (isDtp) {
-      // DTP bridge: use structural mapping (no owner column in CSV)
-      newCategory = inferOwnerCategoryFromDtp(null, b.bridge_type);
-      newOwnerName = newCategory === 'rail' ? 'VicTrack / Rail' : 'VicRoads / DTP';
-    } else {
-      newCategory = inferOwnerCategory(b.owner_name);
-    }
-
-    if (newCategory === b.owner_category && newOwnerName === b.owner_name) {
-      unchanged++;
-      continue;
-    }
-
+  for (const step of steps) {
     try {
-      await pool.query(
-        `UPDATE bridges SET owner_category = $1, owner_name = $2 WHERE id = $3`,
-        [newCategory, newOwnerName, b.id],
-      );
-      updated++;
+      const r = await pool.query(step.sql, step.params);
+      const rowCount = r.rowCount ?? 0;
+      console.log(`[admin] remap-owners [${step.label}]: ${rowCount} rows`);
+      results.push({ label: step.label, rowCount });
     } catch (err) {
-      console.error(`[admin] remap-owners: update failed for id=${b.id}:`, err);
+      console.error(`[admin] remap-owners [${step.label}] failed:`, err);
       errors++;
+      results.push({ label: step.label, rowCount: -1 });
     }
   }
 
-  console.log(
-    `[admin] remap-owners complete: updated=${updated} unchanged=${unchanged} errors=${errors}`,
+  // Return new distribution
+  const distRes = await pool.query(
+    `SELECT owner_name, owner_category, COUNT(*) AS count
+     FROM bridges
+     GROUP BY owner_name, owner_category
+     ORDER BY count DESC
+     LIMIT 30`,
   );
-  res.json({ success: true, updated, unchanged, errors, total: bridges.length });
+
+  const total = (await pool.query('SELECT COUNT(*) AS n FROM bridges')).rows[0] as { n: string };
+
+  console.log(`[admin] remap-owners complete. errors=${errors}`);
+  res.json({
+    success: errors === 0,
+    errors,
+    steps: results,
+    total: parseInt(total.n, 10),
+    distribution: distRes.rows,
+  });
 });
 
 // GET /api/admin/owner-diagnosis — temporary diagnostic
