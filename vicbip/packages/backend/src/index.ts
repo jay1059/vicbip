@@ -6,6 +6,7 @@ import path, { join } from 'path';
 dotenv.config({ path: join(__dirname, '../../../..', '.env') });
 
 import bridgesRouter from './routes/bridges';
+import adminRouter from './routes/admin';
 import { runMigrations } from './migrations/run';
 
 const app = express();
@@ -19,6 +20,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/bridges', bridgesRouter);
+app.use('/api/admin', adminRouter);
 
 // Serve frontend static files
 const frontendDist = path.join(__dirname, '../../frontend/dist');
