@@ -1,0 +1,54 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    environment:
+      POSTGRES_DB: vicbip
+      POSTGRES_USER: vicbip
+      POSTGRES_PASSWORD: vicbip
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U vicbip -d vicbip']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./packages/backend
+      dockerfile: Dockerfile
+    ports:
+      - '3001:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://vicbip:vicbip@postgres:5432/vicbip
+      NODE_ENV: production
+    volumes:
+      - ./packages/backend:/app
+      - /app/node_modules
+
+  frontend:
+    build:
+      context: ./packages/frontend
+      dockerfile: Dockerfile
+    ports:
+      - '5173:5173'
+    depends_on:
+      - backend
+    env_file:
+      - .env
+    volumes:
+      - ./packages/frontend:/app
+      - /app/node_modules
+
+volumes:
+  pgdata:
