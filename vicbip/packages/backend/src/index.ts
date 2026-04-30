@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import * as dotenv from 'dotenv';
-import { join } from 'path';
+import path, { join } from 'path';
 
 dotenv.config({ path: join(__dirname, '../../../..', '.env') });
 
@@ -18,6 +18,15 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/bridges', bridgesRouter);
+
+// Serve frontend static files
+const frontendDist = path.join(__dirname, '../../frontend/dist');
+app.use(express.static(frontendDist));
+
+// Catch-all: serve index.html for React Router
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendDist, 'index.html'));
+});
 
 app.listen(PORT, () => {
   console.log(`VicBIP backend running on port ${PORT}`);
