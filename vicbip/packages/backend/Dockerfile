@@ -1,18 +1,24 @@
 FROM node:20-alpine
 
-WORKDIR /app
-
 RUN npm install -g pnpm
 
-COPY package.json ./
-COPY tsconfig.json ./
+WORKDIR /app
 
+# Copy workspace config
+COPY pnpm-workspace.yaml ./
+COPY package.json ./
+
+# Copy all packages
+COPY packages/shared ./packages/shared
+COPY packages/backend ./packages/backend
+
+# Install dependencies
 RUN pnpm install
 
-COPY src ./src
-
-RUN pnpm run build
+# Build shared first, then backend
+RUN pnpm --filter shared build || true
+RUN pnpm --filter backend run build
 
 EXPOSE 3001
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "packages/backend/dist/index.js"]
