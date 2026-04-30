@@ -20,8 +20,8 @@ services:
 
   backend:
     build:
-      context: ./packages/backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: packages/backend/Dockerfile
     ports:
       - '3001:3001'
     depends_on:
@@ -32,9 +32,6 @@ services:
     environment:
       DATABASE_URL: postgres://vicbip:vicbip@postgres:5432/vicbip
       NODE_ENV: production
-    volumes:
-      - ./packages/backend:/app
-      - /app/node_modules
 
   frontend:
     build:
