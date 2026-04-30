@@ -6,7 +6,6 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
   PieChart,
   Pie,
   Cell,
@@ -82,12 +81,12 @@ export function DashboardView(): React.ReactElement {
   }
 
   const eraData = [
-    { era: 'Pre-1960', count: stats.by_era.pre_1960 },
-    { era: '1960–1980', count: stats.by_era.x1960_1980 },
-    { era: '1980–2000', count: stats.by_era.x1980_2000 },
-    { era: '2000–2010', count: stats.by_era.x2000_2010 },
-    { era: '2010+', count: stats.by_era.x2010_plus },
-    { era: 'Unknown', count: stats.by_era.unknown },
+    { era: 'Pre-1960', count: stats.by_era.pre_1960, color: '#1B4F8C' },
+    { era: '1960–1980', count: stats.by_era.x1960_1980, color: '#1B4F8C' },
+    { era: '1980–2000', count: stats.by_era.x1980_2000, color: '#1B4F8C' },
+    { era: '2000–2010', count: stats.by_era.x2000_2010, color: '#1B4F8C' },
+    { era: '2010+', count: stats.by_era.x2010_plus, color: '#1B4F8C' },
+    { era: 'Year Not Recorded', count: stats.by_era.unknown, color: '#9CA3AF' },
   ].filter((d) => d.count > 0);
 
   const ownerData = Object.entries(stats.by_owner_category)
@@ -150,7 +149,11 @@ export function DashboardView(): React.ReactElement {
                 />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#1B4F8C" name="Bridges" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="count" name="Bridges" radius={[3, 3, 0, 0]}>
+                  {eraData.map((entry, idx) => (
+                    <Cell key={`era-cell-${idx}`} fill={entry.color} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>

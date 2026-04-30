@@ -15,6 +15,8 @@ export function computeStdPts(year: number | null): number {
 }
 
 export function computeBasicSriScore(year: number | null): number {
+  // Bridges with no construction year default to 35 (moderate risk)
+  if (year === null) return 35;
   const agePts = computeAgePts(year);
   const stdPts = computeStdPts(year);
   const basePts = 10;

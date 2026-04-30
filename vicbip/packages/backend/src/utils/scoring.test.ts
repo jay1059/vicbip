@@ -55,6 +55,10 @@ describe('computeStdPts', () => {
 });
 
 describe('computeBasicSriScore', () => {
+  it('returns 35 (moderate default) for null year', () => {
+    expect(computeBasicSriScore(null)).toBe(35);
+  });
+
   it('caps at 100 for very old bridges', () => {
     expect(computeBasicSriScore(1890)).toBeLessThanOrEqual(100);
   });

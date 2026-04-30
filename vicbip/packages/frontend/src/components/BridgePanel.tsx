@@ -225,14 +225,18 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
       <div className="p-4 border-b border-slate-200 dark:border-slate-700">
         <Section title="Structural Profile">
           <dl className="space-y-2 text-sm">
-            {bridge.construction_year && (
-              <div className="flex gap-2">
-                <dt className="text-slate-500 shrink-0 w-28">Year Built:</dt>
+            <div className="flex gap-2">
+              <dt className="text-slate-500 shrink-0 w-28">Year Built:</dt>
+              {bridge.construction_year ? (
                 <dd className="text-slate-800 dark:text-slate-200 font-medium">
                   {bridge.construction_year}
                 </dd>
-              </div>
-            )}
+              ) : (
+                <dd className="text-slate-400 dark:text-slate-500 italic">
+                  Year not recorded
+                </dd>
+              )}
+            </div>
             {bridge.design_load_std && (
               <div className="flex gap-2">
                 <dt className="text-slate-500 shrink-0 w-28">Design Load:</dt>
