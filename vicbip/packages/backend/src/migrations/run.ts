@@ -5,11 +5,11 @@ import * as dotenv from 'dotenv';
 
 dotenv.config({ path: join(__dirname, '../../../..', '.env') });
 
-const pool = new Pool({
-  connectionString: process.env['DATABASE_URL'],
-});
+export async function runMigrations(migrationsDir: string): Promise<void> {
+  const pool = new Pool({
+    connectionString: process.env['DATABASE_URL'],
+  });
 
-async function runMigrations(): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query(`
@@ -20,7 +20,6 @@ async function runMigrations(): Promise<void> {
       )
     `);
 
-    const migrationsDir = __dirname;
     const files = readdirSync(migrationsDir)
       .filter((f) => f.endsWith('.sql'))
       .sort();
@@ -32,26 +31,28 @@ async function runMigrations(): Promise<void> {
       );
 
       if (result.rows.length === 0) {
-        console.log(`Applying migration: ${file}`);
+        console.log(`[migrate] Applying: ${file}`);
         const sql = readFileSync(join(migrationsDir, file), 'utf8');
         await client.query(sql);
-        await client.query('INSERT INTO migrations (filename) VALUES ($1)', [
-          file,
-        ]);
-        console.log(`Applied: ${file}`);
+        await client.query('INSERT INTO migrations (filename) VALUES ($1)', [file]);
+        console.log(`[migrate] Applied: ${file}`);
       } else {
-        console.log(`Skipping (already applied): ${file}`);
+        console.log(`[migrate] Already applied: ${file}`);
       }
     }
 
-    console.log('All migrations complete.');
+    console.log('[migrate] All migrations complete.');
   } finally {
     client.release();
     await pool.end();
   }
 }
 
-runMigrations().catch((err) => {
-  console.error('Migration failed:', err);
-  process.exit(1);
-});
+// Allow running directly: ts-node src/migrations/run.ts
+if (require.main === module) {
+  const migrationsDir = join(__dirname, '.');
+  runMigrations(migrationsDir).catch((err) => {
+    console.error('[migrate] Failed:', err);
+    process.exit(1);
+  });
+}
