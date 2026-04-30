@@ -622,4 +622,56 @@ router.get('/owner-diagnosis', async (_req: Request, res: Response): Promise<voi
   }
 });
 
+// GET /api/admin/run-tender-scrape
+// Runs both Python tender scraper scripts sequentially and returns combined output.
+// Python3 + playwright + psycopg2 + rapidfuzz must be installed in the container.
+router.get('/run-tender-scrape', (req: Request, res: Response): void => {
+  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
+  const pipelineDir = path.join(repoRoot, 'packages', 'pipeline', 'ingest');
+  const env = { ...process.env };
+
+  const scripts = [
+    { name: 'austender.py', path: path.join(pipelineDir, 'austender.py') },
+    { name: 'tenders_vic.py', path: path.join(pipelineDir, 'tenders_vic.py') },
+  ];
+
+  const results: Array<{ script: string; success: boolean; output: string }> = [];
+
+  function runNext(idx: number): void {
+    if (idx >= scripts.length) {
+      const allOk = results.every((r) => r.success);
+      res.status(allOk ? 200 : 500).json({
+        success: allOk,
+        results,
+      });
+      return;
+    }
+
+    const script = scripts[idx];
+    if (!script) { runNext(idx + 1); return; }
+
+    console.log(`[admin] run-tender-scrape: starting ${script.name}`);
+
+    exec(
+      `python3 "${script.path}"`,
+      { env, cwd: repoRoot, maxBuffer: 10 * 1024 * 1024, timeout: 300_000 },
+      (error, stdout, stderr) => {
+        const output = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
+        const success = !error;
+
+        if (error) {
+          console.error(`[admin] run-tender-scrape: ${script.name} failed: ${error.message}`);
+        } else {
+          console.log(`[admin] run-tender-scrape: ${script.name} complete`);
+        }
+
+        results.push({ script: script.name, success, output });
+        runNext(idx + 1);
+      },
+    );
+  }
+
+  runNext(0);
+});
+
 export default router;
