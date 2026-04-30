@@ -227,7 +227,7 @@ function makeSlug(name: string, road: string | null): string {
 }
 
 // GET /api/admin/seed-dtp
-// ?force=true  — DELETE existing DTP rows before re-inserting
+// ?force=true  — DELETE existing DTP rows (SN*, dtp_*, data_sources includes vicroads_dtp)
 router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
   const force = req.query['force'] === 'true';
   console.log(`[admin] seed-dtp: starting (force=${force})`);
@@ -267,11 +267,16 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  // Log actual column names from the first row so we can debug future schema changes
+  // Log raw column names so they appear in Railway deploy logs
   const rawHeaders = Object.keys(rows[0] ?? {});
-  console.log(`[admin] seed-dtp: CSV headers (${rawHeaders.length}): ${rawHeaders.join(' | ')}`);
+  console.log(`[admin] seed-dtp: ${rows.length} rows, headers: ${rawHeaders.join(' | ')}`);
 
-  // Normalise column names: lowercase, spaces/parens/slashes → underscore, trim trailing _
+  // Log first 3 rows raw so column values are visible in logs
+  for (let i = 0; i < Math.min(3, rows.length); i++) {
+    console.log(`[admin] seed-dtp: row[${i}] = ${JSON.stringify(rows[i])}`);
+  }
+
+  // Normalise column names: lowercase, collapse whitespace/parens/slashes to underscore
   const normKey = (k: string) =>
     k.toLowerCase()
       .replace(/[\s()/\\[\]]+/g, '_')
@@ -287,21 +292,27 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
   const normHeaders = Object.keys(normRows[0] ?? {});
   console.log(`[admin] seed-dtp: normalised headers: ${normHeaders.join(' | ')}`);
 
-  // Pick first matching candidate from a row; returns '' if none found
+  // Pick first matching non-empty candidate; returns '' when none match
   const pick = (row: Record<string, string>, ...candidates: string[]): string => {
     for (const c of candidates) {
-      if (row[c] !== undefined && row[c] !== '') return row[c] as string;
+      const v = row[c];
+      if (v !== undefined && v !== '' && v !== 'NULL') return v;
     }
     return '';
   };
 
-  // --- Optional force-delete of existing DTP bridges ---
+  // --- Optional force-delete ---
+  let deleted = 0;
   if (force) {
     try {
       const del = await pool.query(
-        `DELETE FROM bridges WHERE data_sources @> ARRAY['vicroads_dtp']::text[]`
+        `DELETE FROM bridges
+         WHERE bridge_id LIKE 'SN%'
+            OR bridge_id LIKE 'dtp_%'
+            OR data_sources @> ARRAY['vicroads_dtp']::text[]`,
       );
-      console.log(`[admin] seed-dtp: force=true — deleted ${del.rowCount} existing DTP rows`);
+      deleted = del.rowCount ?? 0;
+      console.log(`[admin] seed-dtp: force=true — deleted ${deleted} existing DTP rows`);
     } catch (err) {
       console.error('[admin] seed-dtp: force delete failed', err);
       res.status(500).json({ success: false, error: `Force delete failed: ${String(err)}` });
@@ -313,38 +324,35 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
-  let skipReasons = { no_latlon: 0, culvert: 0, db_error: 0 };
+  const skipReasons = { no_latlon: 0, culvert: 0, span_too_short: 0, db_error: 0 };
 
   for (const row of normRows) {
-    // The DTP CSV's first column is "Name" which holds the SN bridge ID (e.g. SN0325)
-    // Try all known id column variants
+    // DTP CSV first column 'Name' holds the SN bridge id (e.g. SN0325)
     const rawId = pick(row,
-      'name',           // DTP actual — first column contains SN id
-      'bridge_id', 'bridge_no', 'structure_id', 'asset_id', 'bms_id', 'id', 'no_',
+      'name', 'bridge_id', 'bridge_no', 'structure_id', 'asset_id', 'bms_id', 'id', 'no_',
     );
-    // If rawId looks like an SN bridge id (starts with SN / letters+digits), use it;
-    // otherwise derive a slug below after we have name/road
+    // Detect SN-style ids (1–4 letters followed by digits)
     const looksLikeId = /^[A-Za-z]{1,4}\d+/.test(rawId.trim());
     const idFromCsv = looksLikeId ? rawId.trim() : '';
 
-    // The descriptive name is in "bridge type" column in the DTP CSV (confusingly named)
-    const bridgeTypeCsv = pick(row,
-      'bridge_type',      // normalised "bridge type"
-      'structure_type', 'type',
-    );
-    // Road / location
+    // Bridge type / descriptive name (DTP column name is literally "bridge type")
+    const bridgeTypeCsv = pick(row, 'bridge_type', 'structure_type', 'type');
+
+    // Road name — try several DTP column candidates
     const roadName = pick(row,
-      'local_road_name', 'road_name', 'nm_road_part', 'road', 'street_name', 'location',
+      'local_road_name', 'road_name', 'nm_road_part', 'road', 'street_name',
     ) || null;
-    // Feature crossed
-    const featureCrossed = pick(row,
-      'feature_crossed', 'feature', 'crossing', 'waterway',
-    ) || null;
-    // Year constructed
-    const yearStr = pick(row,
-      'year_constructed', 'construction_year', 'year_built', 'year', 'built',
-    );
-    // Span — DTP CSV has no span column; treat as null (no span filter applied)
+
+    // Feature crossed (what the bridge spans)
+    const featureCrossed = pick(row, 'feature_crossed', 'feature', 'crossing', 'waterway') || null;
+
+    // Year — DTP uses YEAR_CONSTRUCTED; "0" and "NULL" both indicate unknown
+    const yearStr = pick(row, 'year_constructed', 'construction_year', 'year_built', 'year', 'built');
+    const yearInt = yearStr ? parseInt(yearStr, 10) : null;
+    const constructionYear =
+      yearInt !== null && !isNaN(yearInt) && yearInt > 1800 && yearInt <= 2030 ? yearInt : null;
+
+    // Span — DTP CSV has no span column; store null (no span filter for DTP)
     const spanStr = pick(row,
       'span_m', 'span__m_', 'length_m', 'bridge_length', 'structure_length',
       'length', 'span', 'total_span_m', 'total_length_m',
@@ -352,11 +360,7 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
     const spanM = spanStr ? parseFloat(spanStr) : null;
     const validSpan = spanM !== null && !isNaN(spanM) && spanM > 0 ? spanM : null;
 
-    // Owner — DTP CSV has no owner name column; derive from CD_STATE_CLASS + bridge type
-    const ownerName = pick(row, 'owner_name', 'owner', 'responsible_authority', 'authority') || null;
-    const cdStateClass = pick(row, 'cd_state_class') || null;
-
-    // Coordinates — DTP uses LAT / LONGIT
+    // Coordinates — DTP uses LAT / LONGIT (normalises to lat / longit)
     const latStr = pick(row, 'lat', 'latitude', 'y_coord', 'y');
     const lonStr = pick(row, 'longit', 'longitude', 'lon', 'lng', 'x_coord', 'x');
     const lat = parseFloat(latStr);
@@ -367,9 +371,9 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
       continue;
     }
 
-    // Skip culverts — check structure_form and bridge type columns
-    const structureForm = pick(row, 'structure_form', 'form').toLowerCase();
-    const structureStatus = pick(row, 'structure_status', 'status').toLowerCase();
+    // Skip culverts and demolished structures
+    const structureForm = (pick(row, 'structure_form', 'form') || '').toLowerCase();
+    const structureStatus = (pick(row, 'structure_status', 'status') || '').toLowerCase();
     if (
       structureForm.includes('culvert') ||
       bridgeTypeCsv.toLowerCase().includes('culvert') ||
@@ -381,25 +385,24 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
       continue;
     }
 
-    // Use SN id from CSV if available, otherwise generate a stable slug
+    // Build stable bridge_id: use CSV id if available, else slug from type + road
     const finalBridgeId = idFromCsv || makeSlug(bridgeTypeCsv || 'bridge', roadName);
 
-    // Descriptive name: prefer feature_crossed + road; fall back to bridge type
-    const displayName = [featureCrossed, roadName, bridgeTypeCsv]
-      .filter(Boolean)
-      .join(' — ') || finalBridgeId;
+    // Descriptive display name
+    const displayName =
+      [featureCrossed, roadName, bridgeTypeCsv].filter(Boolean).join(' — ') || finalBridgeId;
 
-    const year = yearStr ? parseInt(yearStr, 10) : null;
-    const constructionYear = year && !isNaN(year) && year > 1800 && year <= 2030 ? year : null;
+    // Owner — DTP has no owner column; use CD_STATE_CLASS + bridge type
+    const ownerNameRaw = pick(row, 'owner_name', 'owner', 'responsible_authority', 'authority') || null;
+    const cdStateClass = pick(row, 'cd_state_class') || null;
+    const ownerCategory = ownerNameRaw
+      ? inferOwnerCategory(ownerNameRaw)
+      : inferOwnerCategoryFromDtp(cdStateClass, bridgeTypeCsv);
+    const finalOwnerName = ownerNameRaw ?? (ownerCategory === 'rail' ? 'VicTrack / Rail' : 'VicRoads / DTP');
+
     const designLoadStd = inferDesignLoadStd(constructionYear);
     const sriScore = computeBasicSriScore(constructionYear);
     const riskTier = computeRiskTier(sriScore);
-    // Use DTP-specific mapping (CD_STATE_CLASS + bridge type) when no explicit owner name present
-    const ownerCategory = ownerName
-      ? inferOwnerCategory(ownerName)
-      : inferOwnerCategoryFromDtp(cdStateClass, bridgeTypeCsv);
-    // Synthesise a human-readable owner name for DTP records
-    const finalOwnerName = ownerName ?? (ownerCategory === 'rail' ? 'VicTrack / Rail' : 'VicRoads / DTP');
 
     try {
       const result = await pool.query(
@@ -414,19 +417,19 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
         )
         ON CONFLICT (bridge_id) DO UPDATE SET
           name              = EXCLUDED.name,
-          road_name         = EXCLUDED.road_name,
-          bridge_type       = EXCLUDED.bridge_type,
-          construction_year = EXCLUDED.construction_year,
-          span_m            = EXCLUDED.span_m,
-          feature_crossed   = EXCLUDED.feature_crossed,
-          owner_name        = EXCLUDED.owner_name,
-          owner_category    = EXCLUDED.owner_category,
           latitude          = EXCLUDED.latitude,
           longitude         = EXCLUDED.longitude,
+          span_m            = EXCLUDED.span_m,
+          construction_year = EXCLUDED.construction_year,
+          owner_name        = EXCLUDED.owner_name,
+          owner_category    = EXCLUDED.owner_category,
           design_load_std   = EXCLUDED.design_load_std,
           sri_score         = EXCLUDED.sri_score,
           risk_tier         = EXCLUDED.risk_tier,
           data_sources      = EXCLUDED.data_sources,
+          road_name         = EXCLUDED.road_name,
+          bridge_type       = EXCLUDED.bridge_type,
+          feature_crossed   = EXCLUDED.feature_crossed,
           last_ingested     = NOW()
         RETURNING (xmax = 0) AS is_insert`,
         [
@@ -438,7 +441,8 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
       const isInsert = (result.rows[0] as { is_insert: boolean } | undefined)?.is_insert;
       if (isInsert) inserted++; else updated++;
     } catch (err) {
-      console.warn(`[admin] seed-dtp: db error row id="${finalBridgeId}": ${String(err)}`);
+      const errMsg = String(err);
+      console.warn(`[admin] seed-dtp: db error id="${finalBridgeId}": ${errMsg}`);
       skipReasons.db_error++;
       skipped++;
     }
@@ -446,11 +450,25 @@ router.get('/seed-dtp', async (req: Request, res: Response): Promise<void> => {
 
   const total = normRows.length;
   console.log(
-    `[admin] seed-dtp complete: inserted=${inserted} updated=${updated} ` +
+    `[admin] seed-dtp complete: inserted=${inserted} updated=${updated} deleted=${deleted} ` +
     `skipped=${skipped} (no_latlon=${skipReasons.no_latlon} culvert=${skipReasons.culvert} ` +
-    `db_error=${skipReasons.db_error}) total=${total}`,
+    `span_too_short=${skipReasons.span_too_short} db_error=${skipReasons.db_error}) total=${total}`,
   );
-  res.json({ success: true, inserted, updated, skipped, skipReasons, total, csvHeaders: rawHeaders });
+  res.json({
+    success: true,
+    inserted,
+    updated,
+    deleted,
+    skipped,
+    skip_reasons: {
+      no_latlon: skipReasons.no_latlon,
+      culvert: skipReasons.culvert,
+      span_too_short: skipReasons.span_too_short,
+      db_error: skipReasons.db_error,
+    },
+    csv_headers: rawHeaders,
+    total,
+  });
 });
 
 // GET /api/admin/remap-owners
