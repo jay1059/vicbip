@@ -674,4 +674,95 @@ router.get('/run-tender-scrape', (req: Request, res: Response): void => {
   runNext(0);
 });
 
+// Helper: run a single pipeline script and return a promise
+function runPipelineScript(
+  scriptPath: string,
+  scriptName: string,
+  repoRoot: string,
+): Promise<{ script: string; success: boolean; output: string; duration_ms: number }> {
+  const env = { ...process.env };
+  const t0 = Date.now();
+  return new Promise((resolve) => {
+    exec(
+      `python3 "${scriptPath}"`,
+      { env, cwd: repoRoot, maxBuffer: 10 * 1024 * 1024, timeout: 600_000 },
+      (error, stdout, stderr) => {
+        const output = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
+        const duration_ms = Date.now() - t0;
+        resolve({ script: scriptName, success: !error, output, duration_ms });
+      },
+    );
+  });
+}
+
+// GET /api/admin/run-traffic-aadt
+router.get('/run-traffic-aadt', async (_req: Request, res: Response): Promise<void> => {
+  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
+  const scriptPath = path.join(repoRoot, 'packages', 'pipeline', 'ingest', 'traffic_aadt.py');
+  console.log('[admin] run-traffic-aadt: starting');
+  const result = await runPipelineScript(scriptPath, 'traffic_aadt.py', repoRoot);
+  const { success: ok1, ...rest1 } = result;
+  res.status(ok1 ? 200 : 500).json({ success: ok1, ...rest1 });
+});
+
+// GET /api/admin/run-traffic-tirtl
+router.get('/run-traffic-tirtl', async (_req: Request, res: Response): Promise<void> => {
+  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
+  const scriptPath = path.join(repoRoot, 'packages', 'pipeline', 'ingest', 'traffic_tirtl.py');
+  console.log('[admin] run-traffic-tirtl: starting');
+  const result = await runPipelineScript(scriptPath, 'traffic_tirtl.py', repoRoot);
+  const { success: ok2, ...rest2 } = result;
+  res.status(ok2 ? 200 : 500).json({ success: ok2, ...rest2 });
+});
+
+// GET /api/admin/run-crash-data
+router.get('/run-crash-data', async (_req: Request, res: Response): Promise<void> => {
+  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
+  const scriptPath = path.join(repoRoot, 'packages', 'pipeline', 'ingest', 'crash_data.py');
+  console.log('[admin] run-crash-data: starting (WARNING: large file download ~100MB)');
+  const result = await runPipelineScript(scriptPath, 'crash_data.py', repoRoot);
+  const { success: ok3, ...rest3 } = result;
+  res.status(ok3 ? 200 : 500).json({ success: ok3, ...rest3 });
+});
+
+// GET /api/admin/run-disruptions
+router.get('/run-disruptions', async (_req: Request, res: Response): Promise<void> => {
+  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
+  const scriptPath = path.join(repoRoot, 'packages', 'pipeline', 'ingest', 'disruptions.py');
+  console.log('[admin] run-disruptions: starting');
+  const result = await runPipelineScript(scriptPath, 'disruptions.py', repoRoot);
+  const { success: ok4, ...rest4 } = result;
+  res.status(ok4 ? 200 : 500).json({ success: ok4, ...rest4 });
+});
+
+// GET /api/admin/run-all-data
+// Runs traffic-aadt, traffic-tirtl, crash-data, disruptions sequentially
+router.get('/run-all-data', async (_req: Request, res: Response): Promise<void> => {
+  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
+  const pipelineDir = path.join(repoRoot, 'packages', 'pipeline', 'ingest');
+  const scripts = [
+    'traffic_aadt.py',
+    'traffic_tirtl.py',
+    'crash_data.py',
+    'disruptions.py',
+  ];
+
+  console.log('[admin] run-all-data: starting all data pipeline scripts');
+  const results = [];
+
+  for (const scriptName of scripts) {
+    const scriptPath = path.join(pipelineDir, scriptName);
+    console.log(`[admin] run-all-data: running ${scriptName}`);
+    const result = await runPipelineScript(scriptPath, scriptName, repoRoot);
+    results.push(result);
+    if (!result.success) {
+      console.error(`[admin] run-all-data: ${scriptName} failed`);
+    }
+  }
+
+  const allOk = results.every((r) => r.success);
+  console.log(`[admin] run-all-data: complete. success=${allOk}`);
+  res.status(allOk ? 200 : 500).json({ success: allOk, results });
+});
+
 export default router;

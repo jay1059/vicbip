@@ -51,6 +51,20 @@ export interface BridgeTraffic {
   heavy_pct: number | null;
   station_id: string | null;
   station_dist_m: number | null;
+  high_hv_flag: boolean | null;
+}
+
+export interface BridgeCrashSummary {
+  bridge_id: string;
+  total_crashes: number;
+  fatal_crashes: number;
+  serious_crashes: number;
+  heavy_vehicle_crashes: number;
+  bridge_adjacent_crashes: number;
+  on_bridge_crashes: number;
+  date_range_start: string | null;
+  date_range_end: string | null;
+  crash_risk_score: number;
 }
 
 export interface BridgeEvent {
@@ -115,6 +129,7 @@ export interface BridgeGeoJSONCollection {
 
 export interface BridgeDetail extends Bridge {
   traffic: BridgeTraffic | null;
+  crash_summary: BridgeCrashSummary | null;
   events: BridgeEvent[];
   tenders: BridgeTender[];
   intelligence: BridgeIntelligence[];
@@ -133,6 +148,8 @@ export interface BridgeStats {
     x2010_plus: number;
     unknown: number;
   };
+  high_traffic_count: number;
+  crash_flagged_count: number;
   top20: Array<{
     id: string;
     name: string;

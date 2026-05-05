@@ -265,36 +265,47 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
         <Section title="Traffic & Loading">
           {bridge.traffic ? (
             <dl className="space-y-2 text-sm">
-              {bridge.traffic.aadt_total && (
+              {bridge.traffic.aadt_total != null && (
                 <div className="flex gap-2">
-                  <dt className="text-slate-500 shrink-0 w-28">AADT ({bridge.traffic.year}):</dt>
+                  <dt className="text-slate-500 shrink-0 w-28">
+                    AADT {bridge.traffic.year ? `(${bridge.traffic.year})` : ''}:
+                  </dt>
                   <dd className="text-slate-800 dark:text-slate-200 font-medium">
                     {bridge.traffic.aadt_total.toLocaleString()}
                   </dd>
                 </div>
               )}
-              {bridge.traffic.heavy_pct !== null && bridge.traffic.heavy_pct !== undefined && (
-                <div className="flex gap-2">
+              {bridge.traffic.heavy_pct != null && (
+                <div className="flex items-center gap-2">
                   <dt className="text-slate-500 shrink-0 w-28">Heavy Vehicle %:</dt>
-                  <dd className="text-slate-800 dark:text-slate-200 font-medium">
-                    {bridge.traffic.heavy_pct.toFixed(1)}%
-                    {bridge.traffic.heavy_pct > 15 && (
-                      <span className="ml-2 text-xs text-red-600 dark:text-red-400 font-medium">
-                        HIGH
+                  <dd className="flex items-center gap-2">
+                    <span className="text-slate-800 dark:text-slate-200 font-medium">
+                      {bridge.traffic.heavy_pct.toFixed(1)}%
+                    </span>
+                    {bridge.traffic.heavy_pct > 15 ? (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
+                        HIGH HV LOADING
+                      </span>
+                    ) : bridge.traffic.heavy_pct > 10 ? (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
+                        ELEVATED HV
+                      </span>
+                    ) : (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                        NORMAL
                       </span>
                     )}
                   </dd>
                 </div>
               )}
-              {bridge.traffic.station_dist_m !== null &&
-                bridge.traffic.station_dist_m !== undefined && (
-                  <div className="flex gap-2">
-                    <dt className="text-slate-500 shrink-0 w-28">Station dist:</dt>
-                    <dd className="text-slate-800 dark:text-slate-200">
-                      {bridge.traffic.station_dist_m.toFixed(0)}m
-                    </dd>
-                  </div>
-                )}
+              {bridge.traffic.station_dist_m != null && (
+                <div className="flex gap-2">
+                  <dt className="text-slate-500 shrink-0 w-28">Station dist:</dt>
+                  <dd className="text-slate-500 dark:text-slate-400 text-xs">
+                    {bridge.traffic.station_dist_m.toFixed(0)} m to nearest count station
+                  </dd>
+                </div>
+              )}
               {/* Weight restriction events */}
               {(() => {
                 const weightRestrictions = bridge.events.filter(
@@ -366,14 +377,54 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
             </p>
           )}
 
-          {(() => {
-            const crashes = bridge.events.filter((e) => e.event_type === 'crash').length;
-            return crashes > 0 ? (
-              <div className="mt-2 inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/20 text-orange-800 dark:text-orange-200 px-2 py-0.5 rounded text-xs font-medium">
-                {crashes} crash{crashes !== 1 ? 'es' : ''} recorded
-              </div>
-            ) : null;
-          })()}
+          {/* Crash summary from crash_data.py */}
+          {bridge.crash_summary && bridge.crash_summary.total_crashes > 0 && (
+            <div className="mt-3 border border-orange-200 dark:border-orange-800 rounded p-3 bg-orange-50 dark:bg-orange-900/10">
+              <p className="text-xs font-semibold text-orange-700 dark:text-orange-300 mb-2 uppercase tracking-wide">
+                Crash Data (5-year window)
+              </p>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                <dt className="text-slate-500">Total crashes:</dt>
+                <dd className="font-medium text-slate-800 dark:text-slate-200">
+                  {bridge.crash_summary.total_crashes}
+                </dd>
+                {bridge.crash_summary.fatal_crashes > 0 && (
+                  <>
+                    <dt className="text-red-600 dark:text-red-400">Fatal crashes:</dt>
+                    <dd className="font-bold text-red-600 dark:text-red-400">
+                      {bridge.crash_summary.fatal_crashes}
+                    </dd>
+                  </>
+                )}
+                {bridge.crash_summary.heavy_vehicle_crashes > 0 && (
+                  <>
+                    <dt className="text-slate-500">Heavy vehicle:</dt>
+                    <dd className="font-medium text-slate-800 dark:text-slate-200">
+                      {bridge.crash_summary.heavy_vehicle_crashes}
+                    </dd>
+                  </>
+                )}
+                {bridge.crash_summary.on_bridge_crashes > 0 && (
+                  <>
+                    <dt className="text-slate-500">On-bridge:</dt>
+                    <dd className="font-medium text-slate-800 dark:text-slate-200">
+                      {bridge.crash_summary.on_bridge_crashes}
+                    </dd>
+                  </>
+                )}
+              </dl>
+              {bridge.latitude != null && bridge.longitude != null && (
+                <a
+                  href={`https://www.google.com/maps/@${bridge.latitude},${bridge.longitude},17z`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-block text-xs text-brand-blue hover:underline"
+                >
+                  View crash map ↗
+                </a>
+              )}
+            </div>
+          )}
         </Section>
       </div>
 

@@ -107,27 +107,13 @@ export function DashboardView(): React.ReactElement {
     <div className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-950" role="main">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* KPI Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" role="region" aria-label="Key metrics">
-          <KpiCard
-            value={stats.total}
-            label="Total Bridges"
-            borderColor="#1B4F8C"
-          />
-          <KpiCard
-            value={stats.by_tier.critical}
-            label="Critical Risk"
-            borderColor="#DC2626"
-          />
-          <KpiCard
-            value={stats.by_tier.high}
-            label="High Risk"
-            borderColor="#EA580C"
-          />
-          <KpiCard
-            value={stats.by_tier.moderate + stats.by_tier.low}
-            label="Moderate / Low Risk"
-            borderColor="#16A34A"
-          />
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4" role="region" aria-label="Key metrics">
+          <KpiCard value={stats.total} label="Total Bridges" borderColor="#1B4F8C" />
+          <KpiCard value={stats.by_tier.critical} label="Critical Risk" borderColor="#DC2626" />
+          <KpiCard value={stats.by_tier.high} label="High Risk" borderColor="#EA580C" />
+          <KpiCard value={stats.by_tier.moderate + stats.by_tier.low} label="Moderate / Low" borderColor="#16A34A" />
+          <KpiCard value={stats.high_traffic_count} label="High HV Traffic" borderColor="#7C3AED" />
+          <KpiCard value={stats.crash_flagged_count} label="Crash Flagged" borderColor="#DC2626" />
         </div>
 
         {/* Charts Row */}

@@ -6,6 +6,7 @@ import type {
   BridgeGeoJSONCollection,
   BridgeDetail,
   BridgeStats,
+  BridgeCrashSummary,
   OwnerCategory,
   RiskTier,
 } from '@vicbip/shared';
@@ -202,7 +203,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 // GET /api/bridges/stats — must be before /:id route
 router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const [totalRes, tierRes, ownerRes, eraRes, top20Res] = await Promise.all([
+    const [totalRes, tierRes, ownerRes, eraRes, top20Res, trafficRes, crashRes] = await Promise.all([
       pool.query('SELECT COUNT(*) AS total FROM bridges'),
       pool.query(
         `SELECT risk_tier, COUNT(*) AS cnt FROM bridges WHERE risk_tier IS NOT NULL GROUP BY risk_tier`,
@@ -222,6 +223,12 @@ router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
       `),
       pool.query(
         `SELECT id, name, owner_name, sri_score, risk_tier FROM bridges ORDER BY sri_score DESC LIMIT 20`,
+      ),
+      pool.query(
+        `SELECT COUNT(DISTINCT bridge_id) AS cnt FROM bridge_traffic WHERE heavy_pct > 15`,
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS cnt FROM bridge_crash_summary WHERE crash_risk_score > 3`,
       ),
     ]);
 
@@ -269,6 +276,8 @@ router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
         sri_score: r.sri_score as number,
         risk_tier: r.risk_tier as RiskTier | null,
       })),
+      high_traffic_count: parseInt((trafficRes.rows[0] as { cnt: string } | undefined)?.cnt ?? '0', 10),
+      crash_flagged_count: parseInt((crashRes.rows[0] as { cnt: string } | undefined)?.cnt ?? '0', 10),
     };
 
     res.json(stats);
@@ -355,11 +364,15 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   const id = parsed.data;
 
   try {
-    const [bridgeRes, trafficRes, eventsRes, tendersRes, intelligenceRes] =
+    const [bridgeRes, trafficRes, crashRes, eventsRes, tendersRes, intelligenceRes] =
       await Promise.all([
         pool.query(`SELECT * FROM bridges WHERE id = $1`, [id]),
         pool.query(
           `SELECT * FROM bridge_traffic WHERE bridge_id = $1 ORDER BY year DESC LIMIT 1`,
+          [id],
+        ),
+        pool.query(
+          `SELECT * FROM bridge_crash_summary WHERE bridge_id = $1`,
           [id],
         ),
         pool.query(
@@ -418,6 +431,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       notes: bridge['notes'] as string | null,
       last_ingested: bridge['last_ingested'] as string,
       traffic: trafficRes.rows.length > 0 ? (trafficRes.rows[0] as BridgeDetail['traffic']) : null,
+      crash_summary: crashRes.rows.length > 0 ? (crashRes.rows[0] as BridgeCrashSummary) : null,
       events: eventsRes.rows as BridgeDetail['events'],
       tenders,
       intelligence: intelligenceRes.rows as BridgeDetail['intelligence'],
