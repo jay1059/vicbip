@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { FilterPanel } from './components/FilterPanel';
 import { MapView } from './components/MapView';
 import { DashboardView } from './components/DashboardView';
+import { AdminPanel } from './components/AdminPanel';
 import { BridgePanel } from './components/BridgePanel';
 import { Disclaimer } from './components/Disclaimer';
 import { useAppStore } from './store/useAppStore';
@@ -33,6 +34,14 @@ function App(): React.ReactElement {
             aria-hidden={activeTab !== 'dashboard'}
           >
             <DashboardView />
+          </div>
+          <div
+            className={`absolute inset-0 transition-opacity duration-200 overflow-hidden ${
+              activeTab === 'admin' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+            }`}
+            aria-hidden={activeTab !== 'admin'}
+          >
+            <AdminPanel />
           </div>
         </main>
       </div>

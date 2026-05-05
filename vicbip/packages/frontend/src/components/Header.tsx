@@ -53,6 +53,17 @@ export function Header(): React.ReactElement {
         >
           Dashboard
         </button>
+        <button
+          onClick={() => setActiveTab('admin')}
+          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
+            activeTab === 'admin'
+              ? 'bg-white text-brand-blue'
+              : 'text-white/80 hover:text-white hover:bg-white/10'
+          }`}
+          aria-current={activeTab === 'admin' ? 'page' : undefined}
+        >
+          Admin
+        </button>
       </nav>
 
       <button

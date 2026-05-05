@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type ViewTab = 'map' | 'dashboard';
+type ViewTab = 'map' | 'dashboard' | 'admin';
 
 interface AppState {
   selectedBridgeId: string | null;
