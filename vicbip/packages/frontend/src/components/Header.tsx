@@ -27,6 +27,7 @@ export function Header(): React.ReactElement {
           <span className="text-white/60 text-sm hidden sm:inline">
             | Victoria Bridge Intelligence Platform
           </span>
+          <span className="text-white/30 text-xs hidden sm:inline">v2.1</span>
         </div>
       </div>
 
