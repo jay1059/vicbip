@@ -41,8 +41,8 @@ endpoints.forEach(([label,ep,color]) => {
   const btn = document.createElement('button');
   btn.textContent = label;
   btn.style.cssText='padding:10px 20px;background:'+color+';color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px';
-  const status = document.createElement('span');
-  status.style.cssText='color:#94a3b8;font-size:13px;font-family:monospace;max-width:600px;word-break:break-all';
+  const status = document.createElement('pre');
+  status.style.cssText='color:#94a3b8;font-size:12px;font-family:monospace;max-width:700px;word-break:break-all;white-space:pre-wrap;margin:0';
   btn.onclick = async () => {
     btn.disabled=true;
     status.textContent='Running...';
@@ -50,7 +50,7 @@ endpoints.forEach(([label,ep,color]) => {
     try {
       const r=await fetch('/api/admin/'+ep);
       const d=await r.json();
-      status.textContent=(((Date.now()-t)/1000).toFixed(1))+'s: '+JSON.stringify(d).substring(0,300);
+      status.textContent=(((Date.now()-t)/1000).toFixed(1))+'s: '+JSON.stringify(d,null,2);
       btn.style.background='#166534';
     } catch(e) {
       status.textContent='Error: '+e;

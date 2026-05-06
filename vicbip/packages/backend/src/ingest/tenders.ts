@@ -1,8 +1,9 @@
 /**
  * Scrape tender notices from tenders.vic.gov.au and AusTender.
- * Uses fetch() + minimal HTML/JSON parsing. No Playwright or Python required.
- *
- * Returns html_length in debug output so callers can confirm the page is loading.
+ * v3.1 — both sites block server-side requests (Cloudflare / AWS WAF 403).
+ * Returns 0 results with detailed debug output (HTTP status + body preview)
+ * so the operator can diagnose the block and decide on alternatives.
+ * All errors are non-fatal; the endpoint always returns success=true.
  */
 import { Pool } from 'pg';
 
@@ -116,10 +117,16 @@ async function scrapeVicTenders(debugInfo: Record<string, unknown>): Promise<Ten
           redirect: 'follow',
         });
 
-        const html = resp.ok ? await resp.text() : '';
-        const key = `vic_${kw}`;
+        const rawBody = await resp.text();
+        const html = rawBody;
+        const key = `vic_${kw}_${urls.indexOf(url)}`;
         if (!debugInfo[key]) {
-          debugInfo[key] = { status: resp.status, html_length: html.length, url };
+          debugInfo[key] = {
+            status: resp.status,
+            html_length: html.length,
+            url,
+            body_preview: rawBody.slice(0, 500),
+          };
         }
 
         if (!resp.ok || html.length < 500) continue;
@@ -154,7 +161,11 @@ async function fetchAusTenders(debugInfo: Record<string, unknown>): Promise<Tend
       });
 
       const rawText = await resp.text();
-      debugInfo[`aus_${kw.replace(/ /g, '_')}`] = { status: resp.status, len: rawText.length };
+      debugInfo[`aus_${kw.replace(/ /g, '_')}`] = {
+        status: resp.status,
+        len: rawText.length,
+        body_preview: rawText.slice(0, 500),
+      };
 
       if (!resp.ok) continue;
 
