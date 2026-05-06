@@ -168,8 +168,8 @@ function ActionCard({ action }: { action: AdminAction }): React.ReactElement {
 
 export function AdminPanel(): React.ReactElement {
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-950">
-      <div className="max-w-3xl mx-auto space-y-4">
+    <div className="h-screen overflow-y-auto p-6 bg-slate-50 dark:bg-slate-950">
+      <div className="max-w-3xl mx-auto space-y-4 pb-20">
         <div className="flex items-center justify-between mb-2">
           <div>
             <h1 className="text-xl font-bold text-slate-800 dark:text-slate-200">
