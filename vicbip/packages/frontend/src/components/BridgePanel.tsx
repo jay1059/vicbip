@@ -32,12 +32,12 @@ const DESIGN_LOAD_COLORS: Record<string, string> = {
 };
 
 const SERVICE_LINKS: Record<string, string> = {
-  'External Post-Tensioning': 'https://www.freyssinet.com.au/external-post-tensioning/',
-  'CFRP Structural Strengthening': 'https://www.freyssinet.com.au/frp-strengthening/',
-  'Concrete Rehabilitation': 'https://www.freyssinet.com.au/concrete-repair/',
-  'Bearing Replacement': 'https://www.freyssinet.com.au/structural-bearings/',
-  'Expansion Joint Repair': 'https://www.freyssinet.com.au/expansion-joints/',
-  'Seismic Retrofitting': 'https://www.freyssinet.com.au/seismic-protection/',
+  'External Post-Tensioning': 'https://www.freyssinet.com.au/solution/build/post-tensioning/',
+  'CFRP Structural Strengthening': 'https://www.freyssinet.com.au/solution/repair/structural-strengthening/',
+  'Concrete Rehabilitation': 'https://www.freyssinet.com.au/solution/repair/concrete-rehabilitation/',
+  'Bearing Replacement': 'https://www.freyssinet.com.au/solution/repair/bearing-maintenance/',
+  'Expansion Joint Repair': 'https://www.freyssinet.com.au/solution/build/repair-and-maintenance-of-expansion-joints/',
+  'Seismic Retrofitting': 'https://www.freyssinet.com.au/solution/repair/seismic-retrofitting/',
 };
 
 function Skeleton(): React.ReactElement {
@@ -749,7 +749,11 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
       </div>
 
       {/* Section J — Asset Owner Decision Framework (critical/high only) */}
-      {(bridge.risk_tier === 'critical' || bridge.risk_tier === 'high') && (
+      {/* Case-insensitive check handles DB values ('critical') and any legacy
+          capitalised variants ('Critical'); SRI fallback covers NULL risk_tier */}
+      {(bridge.risk_tier?.toLowerCase() === 'critical' ||
+        bridge.risk_tier?.toLowerCase() === 'high' ||
+        bridge.sri_score >= 60) && (
         <div className="p-4">
           <SectionJCostMatrix bridge={bridge} />
         </div>
