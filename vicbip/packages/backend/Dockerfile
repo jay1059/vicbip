@@ -5,10 +5,8 @@ FROM node:20-alpine
 ARG BUILD_DATE
 RUN echo "Build date: $BUILD_DATE"
 
-RUN apk add --no-cache python3 py3-pip chromium chromium-chromedriver nss freetype harfbuzz ca-certificates
-RUN pip3 install pandas requests beautifulsoup4 psycopg2-binary rapidfuzz playwright python-dotenv --break-system-packages
-ENV PLAYWRIGHT_BROWSERS_PATH=/usr/bin
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+RUN apk add --no-cache python3 py3-pip
+RUN pip3 install pandas requests beautifulsoup4 psycopg2-binary rapidfuzz python-dotenv --break-system-packages
 RUN npm install -g pnpm
 WORKDIR /app
 COPY pnpm-workspace.yaml .
