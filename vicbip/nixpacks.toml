@@ -1,11 +1,7 @@
-[phases.setup]
-nixPkgs = ["python311", "python311Packages.pip"]
-
 [phases.install]
 cmds = [
   "npm install -g pnpm@9",
-  "pnpm install --frozen-lockfile",
-  "pip3 install pandas requests beautifulsoup4 psycopg2-binary rapidfuzz python-dotenv --break-system-packages"
+  "pnpm install --frozen-lockfile"
 ]
 
 [phases.build]

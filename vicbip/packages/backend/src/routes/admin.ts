@@ -12,6 +12,11 @@ import {
   inferOwnerCategory,
   inferOwnerCategoryFromDtp,
 } from '../utils/scoring';
+import { runAadt } from '../ingest/aadt';
+import { runCrashData } from '../ingest/crashData';
+import { runDisruptions } from '../ingest/disruptions';
+import { runTenderScrape } from '../ingest/tenders';
+import { runTirtl } from '../ingest/tirtl';
 
 const router = Router();
 
@@ -622,56 +627,17 @@ router.get('/owner-diagnosis', async (_req: Request, res: Response): Promise<voi
   }
 });
 
-// GET /api/admin/run-tender-scrape
-// Runs both Python tender scraper scripts sequentially and returns combined output.
-// Python3 + playwright + psycopg2 + rapidfuzz must be installed in the container.
-router.get('/run-tender-scrape', (req: Request, res: Response): void => {
-  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
-  const pipelineDir = path.join(repoRoot, 'packages', 'pipeline', 'ingest');
-  const env = { ...process.env };
-
-  const scripts = [
-    { name: 'austender.py', path: path.join(pipelineDir, 'austender.py') },
-    { name: 'tenders_vic.py', path: path.join(pipelineDir, 'tenders_vic.py') },
-  ];
-
-  const results: Array<{ script: string; success: boolean; output: string }> = [];
-
-  function runNext(idx: number): void {
-    if (idx >= scripts.length) {
-      const allOk = results.every((r) => r.success);
-      res.status(allOk ? 200 : 500).json({
-        success: allOk,
-        results,
-      });
-      return;
-    }
-
-    const script = scripts[idx];
-    if (!script) { runNext(idx + 1); return; }
-
-    console.log(`[admin] run-tender-scrape: starting ${script.name}`);
-
-    exec(
-      `python3 "${script.path}"`,
-      { env, cwd: repoRoot, maxBuffer: 10 * 1024 * 1024, timeout: 300_000 },
-      (error, stdout, stderr) => {
-        const output = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
-        const success = !error;
-
-        if (error) {
-          console.error(`[admin] run-tender-scrape: ${script.name} failed: ${error.message}`);
-        } else {
-          console.log(`[admin] run-tender-scrape: ${script.name} complete`);
-        }
-
-        results.push({ script: script.name, success, output });
-        runNext(idx + 1);
-      },
-    );
+// GET /api/admin/run-tender-scrape — pure TypeScript implementation
+router.get('/run-tender-scrape', async (_req: Request, res: Response): Promise<void> => {
+  console.log('[admin] run-tender-scrape: starting (TS)');
+  const t0 = Date.now();
+  try {
+    const result = await runTenderScrape(pool);
+    res.json({ success: true, duration_ms: Date.now() - t0, ...result });
+  } catch (err) {
+    console.error('[admin] run-tender-scrape failed:', err);
+    res.status(500).json({ success: false, error: String(err), duration_ms: Date.now() - t0 });
   }
-
-  runNext(0);
 });
 
 // Helper: run a single pipeline script and return a promise
@@ -695,74 +661,83 @@ function runPipelineScript(
   });
 }
 
-// GET /api/admin/run-traffic-aadt
+// GET /api/admin/run-traffic-aadt — pure TypeScript implementation
 router.get('/run-traffic-aadt', async (_req: Request, res: Response): Promise<void> => {
-  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
-  const scriptPath = path.join(repoRoot, 'packages', 'pipeline', 'ingest', 'traffic_aadt.py');
-  console.log('[admin] run-traffic-aadt: starting');
-  const result = await runPipelineScript(scriptPath, 'traffic_aadt.py', repoRoot);
-  const { success: ok1, ...rest1 } = result;
-  res.status(ok1 ? 200 : 500).json({ success: ok1, ...rest1 });
-});
-
-// GET /api/admin/run-traffic-tirtl
-router.get('/run-traffic-tirtl', async (_req: Request, res: Response): Promise<void> => {
-  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
-  const scriptPath = path.join(repoRoot, 'packages', 'pipeline', 'ingest', 'traffic_tirtl.py');
-  console.log('[admin] run-traffic-tirtl: starting');
-  const result = await runPipelineScript(scriptPath, 'traffic_tirtl.py', repoRoot);
-  const { success: ok2, ...rest2 } = result;
-  res.status(ok2 ? 200 : 500).json({ success: ok2, ...rest2 });
-});
-
-// GET /api/admin/run-crash-data
-router.get('/run-crash-data', async (_req: Request, res: Response): Promise<void> => {
-  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
-  const scriptPath = path.join(repoRoot, 'packages', 'pipeline', 'ingest', 'crash_data.py');
-  console.log('[admin] run-crash-data: starting (WARNING: large file download ~100MB)');
-  const result = await runPipelineScript(scriptPath, 'crash_data.py', repoRoot);
-  const { success: ok3, ...rest3 } = result;
-  res.status(ok3 ? 200 : 500).json({ success: ok3, ...rest3 });
-});
-
-// GET /api/admin/run-disruptions
-router.get('/run-disruptions', async (_req: Request, res: Response): Promise<void> => {
-  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
-  const scriptPath = path.join(repoRoot, 'packages', 'pipeline', 'ingest', 'disruptions.py');
-  console.log('[admin] run-disruptions: starting');
-  const result = await runPipelineScript(scriptPath, 'disruptions.py', repoRoot);
-  const { success: ok4, ...rest4 } = result;
-  res.status(ok4 ? 200 : 500).json({ success: ok4, ...rest4 });
-});
-
-// GET /api/admin/run-all-data
-// Runs traffic-aadt, traffic-tirtl, crash-data, disruptions sequentially
-router.get('/run-all-data', async (_req: Request, res: Response): Promise<void> => {
-  const repoRoot = path.join(__dirname, '..', '..', '..', '..');
-  const pipelineDir = path.join(repoRoot, 'packages', 'pipeline', 'ingest');
-  const scripts = [
-    'traffic_aadt.py',
-    'traffic_tirtl.py',
-    'crash_data.py',
-    'disruptions.py',
-  ];
-
-  console.log('[admin] run-all-data: starting all data pipeline scripts');
-  const results = [];
-
-  for (const scriptName of scripts) {
-    const scriptPath = path.join(pipelineDir, scriptName);
-    console.log(`[admin] run-all-data: running ${scriptName}`);
-    const result = await runPipelineScript(scriptPath, scriptName, repoRoot);
-    results.push(result);
-    if (!result.success) {
-      console.error(`[admin] run-all-data: ${scriptName} failed`);
-    }
+  console.log('[admin] run-traffic-aadt: starting (TS)');
+  const t0 = Date.now();
+  try {
+    const result = await runAadt(pool);
+    res.json({ success: true, duration_ms: Date.now() - t0, ...result });
+  } catch (err) {
+    console.error('[admin] run-traffic-aadt failed:', err);
+    res.status(500).json({ success: false, error: String(err), duration_ms: Date.now() - t0 });
   }
+});
+
+// GET /api/admin/run-traffic-tirtl — pure TypeScript implementation
+router.get('/run-traffic-tirtl', async (_req: Request, res: Response): Promise<void> => {
+  console.log('[admin] run-traffic-tirtl: starting (TS)');
+  const t0 = Date.now();
+  try {
+    const result = await runTirtl(pool);
+    res.json({ success: true, duration_ms: Date.now() - t0, ...result });
+  } catch (err) {
+    console.error('[admin] run-traffic-tirtl failed:', err);
+    res.status(500).json({ success: false, error: String(err), duration_ms: Date.now() - t0 });
+  }
+});
+
+// GET /api/admin/run-crash-data — pure TypeScript implementation
+router.get('/run-crash-data', async (_req: Request, res: Response): Promise<void> => {
+  console.log('[admin] run-crash-data: starting (TS) — may take several minutes');
+  const t0 = Date.now();
+  try {
+    const result = await runCrashData(pool);
+    res.json({ success: true, duration_ms: Date.now() - t0, ...result });
+  } catch (err) {
+    console.error('[admin] run-crash-data failed:', err);
+    res.status(500).json({ success: false, error: String(err), duration_ms: Date.now() - t0 });
+  }
+});
+
+// GET /api/admin/run-disruptions — pure TypeScript implementation
+router.get('/run-disruptions', async (_req: Request, res: Response): Promise<void> => {
+  console.log('[admin] run-disruptions: starting (TS)');
+  const t0 = Date.now();
+  try {
+    const result = await runDisruptions(pool);
+    res.json({ success: true, duration_ms: Date.now() - t0, ...result });
+  } catch (err) {
+    console.error('[admin] run-disruptions failed:', err);
+    res.status(500).json({ success: false, error: String(err), duration_ms: Date.now() - t0 });
+  }
+});
+
+// GET /api/admin/run-all-data — runs all four TS ingest functions sequentially
+router.get('/run-all-data', async (_req: Request, res: Response): Promise<void> => {
+  console.log('[admin] run-all-data: starting all TS ingest functions');
+  const t0 = Date.now();
+  const results: Array<{ name: string; success: boolean; data?: unknown; error?: string }> = [];
+
+  const run = async (name: string, fn: () => Promise<unknown>) => {
+    try {
+      const data = await fn();
+      console.log(`[admin] run-all-data: ${name} complete`);
+      results.push({ name, success: true, data });
+    } catch (err) {
+      console.error(`[admin] run-all-data: ${name} failed:`, err);
+      results.push({ name, success: false, error: String(err) });
+    }
+  };
+
+  await run('traffic-aadt', () => runAadt(pool));
+  await run('traffic-tirtl', () => runTirtl(pool));
+  await run('crash-data', () => runCrashData(pool));
+  await run('disruptions', () => runDisruptions(pool));
 
   const allOk = results.every((r) => r.success);
   console.log(`[admin] run-all-data: complete. success=${allOk}`);
-  res.status(allOk ? 200 : 500).json({ success: allOk, results });
+  res.status(allOk ? 200 : 500).json({ success: allOk, duration_ms: Date.now() - t0, results });
 });
 
 export default router;
