@@ -32,7 +32,10 @@ const endpoints = [
   ['Run Crash Data (10min)','run-crash-data','#991B1B'],
   ['Run Disruptions','run-disruptions','#92400E'],
   ['Run Tender Scraper','run-tender-scrape','#5B21B6'],
-  ['Run All Data','run-all-data','#92400E']
+  ['Run All Data','run-all-data','#92400E'],
+  ['Discover Crash URLs','discover-crash-urls','#0E7490'],
+  ['Run Google Search (top 20)','run-google-search','#1E40AF'],
+  ['Run Street View (top 100)','run-street-view','#1E40AF']
 ];
 const div = document.getElementById('actions');
 endpoints.forEach(([label,ep,color]) => {
