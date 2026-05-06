@@ -6,7 +6,7 @@
     "dev:frontend": "pnpm --filter frontend dev",
     "dev:backend": "pnpm --filter backend dev",
     "dev:all": "concurrently \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
-    "build": "pnpm --filter frontend build && pnpm --filter backend build",
+    "build": "pnpm --filter shared build && pnpm --filter backend build && pnpm --filter frontend build",
     "typecheck": "pnpm --filter shared build && pnpm --filter backend typecheck && pnpm --filter frontend typecheck",
     "test": "pnpm --filter backend test"
   },
