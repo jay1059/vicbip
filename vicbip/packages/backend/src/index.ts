@@ -1,3 +1,4 @@
+// VicBIP Backend v3.0 - Node.js ingest pipeline - May 2026
 import express from 'express';
 import cors from 'cors';
 import * as dotenv from 'dotenv';
@@ -100,6 +101,7 @@ async function start(): Promise<void> {
     console.error('[startup] Migration failed — aborting:', err);
     process.exit(1);
   }
+  console.log('[startup] VicBIP v3.0 - ingest endpoints active');
   app.listen(PORT, () => {
     console.log(`VicBIP backend running on port ${PORT}`);
   });

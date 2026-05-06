@@ -1,3 +1,4 @@
+// Admin routes v3.0 - Node.js ingest - no Python required
 import { Router, Request, Response } from 'express';
 import { exec } from 'child_process';
 import path from 'path';
