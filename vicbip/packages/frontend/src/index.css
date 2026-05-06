@@ -52,3 +52,30 @@ html, body, #root {
 .dark .section-header {
   @apply text-blue-400 border-blue-400/20;
 }
+
+/* Print: show only Section J decision matrix */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-section-j,
+  .print-section-j * {
+    visibility: visible;
+  }
+
+  .print-section-j {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: white;
+    padding: 2cm;
+    box-sizing: border-box;
+    z-index: 99999;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}

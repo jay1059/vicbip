@@ -100,6 +100,163 @@ function Section({
   );
 }
 
+function SectionJCostMatrix({ bridge }: { bridge: BridgeDetail }): React.ReactElement {
+  const span = bridge.span_m ?? 30;
+
+  const col3CellStyle: React.CSSProperties = {
+    backgroundColor: '#EFF6FF',
+    borderLeft: '3px solid #1B4F8C',
+  };
+
+  const rows: Array<{
+    label: string;
+    col1: React.ReactNode;
+    col2: React.ReactNode;
+    col3: React.ReactNode;
+    col4: React.ReactNode;
+  }> = [
+    {
+      label: 'Indicative Capital Cost',
+      col1: '$0 now — significant deferred risk',
+      col2: `$${Math.round((span * 500) / 1000)}K–$${Math.round((span * 2000) / 1000)}K per year`,
+      col3: `$${Math.round((span * 8 / 1000) * 10) / 10}M–$${Math.round((span * 18 / 1000) * 10) / 10}M (one-off)`,
+      col4: `$${Math.round((span * 12 * 18) / 1000 * 10) / 10}M–$${Math.round((span * 12 * 28) / 1000 * 10) / 10}M`,
+    },
+    {
+      label: 'Service Life Extension',
+      col1: 'Declining — restrictions likely',
+      col2: '5–10 years (deferred replacement only)',
+      col3: '25–40 years to current AS 5100 SM1600',
+      col4: '50–100 years (new structure)',
+    },
+    {
+      label: 'Traffic Disruption',
+      col1: 'HIGH — risk of unplanned emergency closure',
+      col2: 'Periodic lane closures for maintenance',
+      col3: 'LOW — partial closures only (weeks)',
+      col4: 'VERY HIGH — full closure 12–24 months',
+    },
+    {
+      label: 'Embodied Carbon (CO2e)',
+      col1: 'High — emergency replacement eventual',
+      col2: 'Low–Medium',
+      col3: `${Math.round(span * 20)}–${Math.round(span * 60)} tonnes`,
+      col4: `${Math.round(span * 12 * 250)}+ tonnes`,
+    },
+    {
+      label: 'Delivery Program',
+      col1: 'N/A',
+      col2: 'Ongoing',
+      col3: 'Design 6–12 months + Construction 2–6 months',
+      col4: 'Design 18–36 months + Construction 12–24 months',
+    },
+    {
+      label: 'Freyssinet Role',
+      col1: 'None',
+      col2: 'Maintenance contract potential',
+      col3: (
+        <span className="font-bold" style={{ color: '#1B4F8C' }}>
+          PRIMARY CONTRACTOR
+        </span>
+      ),
+      col4: 'Subcontractor (PT/specialist works)',
+    },
+  ];
+
+  return (
+    <div className="print-section-j">
+      {/* Visible only when printing */}
+      <div className="hidden print:block mb-3">
+        <h2 className="text-base font-bold text-slate-900">{bridge.name}</h2>
+      </div>
+
+      <h3 className="section-header">Asset Owner Decision Framework</h3>
+      <p className="text-xs text-slate-500 mb-3">
+        Indicative cost comparison — {bridge.name}
+      </p>
+
+      <div className="overflow-x-auto">
+        <table
+          className="text-xs border-collapse"
+          style={{ minWidth: '500px', width: '100%' }}
+        >
+          <thead>
+            <tr>
+              <th className="text-left p-1.5 text-slate-500 font-medium border-b border-slate-200 align-top w-[22%]" />
+              <th className="text-left p-1.5 text-slate-700 font-semibold border-b border-slate-200 align-top w-[19.5%]">
+                Do Nothing
+              </th>
+              <th className="text-left p-1.5 text-slate-700 font-semibold border-b border-slate-200 align-top w-[19.5%]">
+                Retain &amp; Maintain
+              </th>
+              <th
+                className="text-left p-1.5 font-semibold border-b border-slate-200 align-top w-[19.5%]"
+                style={col3CellStyle}
+              >
+                <div
+                  style={{
+                    color: '#E8731A',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    marginBottom: '2px',
+                  }}
+                >
+                  FREYSSINET RECOMMENDED
+                </div>
+                <span className="text-slate-700">Strengthen (Freyssinet)</span>
+              </th>
+              <th className="text-left p-1.5 text-slate-700 font-semibold border-b border-slate-200 align-top w-[19.5%]">
+                Replace
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50' : ''}>
+                <td className="p-1.5 text-slate-500 font-medium align-top border-b border-slate-100 leading-snug">
+                  {row.label}
+                </td>
+                <td className="p-1.5 text-slate-700 align-top border-b border-slate-100 leading-snug">
+                  {row.col1}
+                </td>
+                <td className="p-1.5 text-slate-700 align-top border-b border-slate-100 leading-snug">
+                  {row.col2}
+                </td>
+                <td
+                  className="p-1.5 text-slate-700 align-top border-b border-slate-100 leading-snug"
+                  style={col3CellStyle}
+                >
+                  {row.col3}
+                </td>
+                <td className="p-1.5 text-slate-700 align-top border-b border-slate-100 leading-snug">
+                  {row.col4}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-[10px] leading-snug text-slate-400 italic">
+        Indicative estimates based on published Austroads benchmarks and 2026 AUD. Not a
+        Freyssinet quotation. Actual costs depend on site conditions, scope and market.
+        Seek professional advice.
+      </p>
+
+      <div className="no-print flex justify-end mt-2">
+        <button
+          onClick={() => window.print()}
+          className="text-xs px-3 py-1.5 border border-brand-blue text-brand-blue rounded hover:bg-blue-50 transition-colors"
+        >
+          Print Decision Matrix
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactElement {
   const [scoreExpanded, setScoreExpanded] = useState(false);
 
@@ -535,7 +692,7 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
       </div>
 
       {/* Section F — Solution Match */}
-      <div className="p-4">
+      <div className="p-4 border-b border-slate-200 dark:border-slate-700">
         <Section title="Solution Match">
           {bridge.solution_match.length > 0 ? (
             <div className="space-y-3">
@@ -590,6 +747,13 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
           )}
         </Section>
       </div>
+
+      {/* Section J — Asset Owner Decision Framework (critical/high only) */}
+      {(bridge.risk_tier === 'critical' || bridge.risk_tier === 'high') && (
+        <div className="p-4">
+          <SectionJCostMatrix bridge={bridge} />
+        </div>
+      )}
     </div>
   );
 }
