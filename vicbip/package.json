@@ -1,6 +1,6 @@
 {
   "name": "vicbip",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "scripts": {
     "dev:frontend": "pnpm --filter frontend dev",
