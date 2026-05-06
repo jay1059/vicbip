@@ -714,6 +714,141 @@ router.get('/run-disruptions', async (_req: Request, res: Response): Promise<voi
   }
 });
 
+// GET /api/admin/discover-crash-urls — fetch CKAN package metadata for Victoria road crash data
+router.get('/discover-crash-urls', async (_req: Request, res: Response): Promise<void> => {
+  const url =
+    'https://discover.data.vic.gov.au/api/3/action/package_show?id=victoria-road-crash-data';
+  console.log('[admin] discover-crash-urls: fetching', url);
+  try {
+    const buf = await fetchUrl(url);
+    const data = JSON.parse(buf.toString('utf8')) as {
+      success: boolean;
+      result: { resources: unknown[] };
+    };
+    res.json({ success: true, resources: data.result.resources });
+  } catch (err) {
+    console.error('[admin] discover-crash-urls failed:', err);
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
+// GET /api/admin/run-google-search — Google Custom Search for top 20 bridges by SRI score
+router.get('/run-google-search', async (_req: Request, res: Response): Promise<void> => {
+  const apiKey = process.env['GOOGLE_SEARCH_API_KEY'];
+  const cx = process.env['GOOGLE_SEARCH_CX'];
+  if (!apiKey || !cx) {
+    res.status(500).json({ success: false, error: 'GOOGLE_SEARCH_API_KEY or GOOGLE_SEARCH_CX env var not set' });
+    return;
+  }
+
+  console.log('[admin] run-google-search: fetching top 20 bridges by SRI score');
+  let bridges: Array<{ id: string; name: string }>;
+  try {
+    const result = await pool.query<{ id: string; name: string }>(
+      `SELECT id, name FROM bridges ORDER BY sri_score DESC LIMIT 20`,
+    );
+    bridges = result.rows;
+  } catch (err) {
+    console.error('[admin] run-google-search: db query failed', err);
+    res.status(500).json({ success: false, error: String(err) });
+    return;
+  }
+
+  let searched = 0;
+  let inserted = 0;
+
+  for (const bridge of bridges) {
+    const query = encodeURIComponent(`${bridge.name} bridge Victoria works`);
+    const searchUrl =
+      `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${query}`;
+    try {
+      const buf = await fetchUrl(searchUrl);
+      const data = JSON.parse(buf.toString('utf8')) as {
+        items?: Array<{ title: string; snippet: string; link: string }>;
+      };
+      searched++;
+      const items = (data.items ?? []).slice(0, 3);
+      for (const item of items) {
+        try {
+          await pool.query(
+            `INSERT INTO bridge_intelligence (bridge_id, source_type, headline, snippet, url, collected_at)
+             VALUES ($1, 'google_search', $2, $3, $4, NOW())
+             ON CONFLICT (url) DO NOTHING`,
+            [bridge.id, item.title, item.snippet, item.link],
+          );
+          inserted++;
+        } catch (dbErr) {
+          console.warn(`[admin] run-google-search: insert failed for ${item.link}:`, dbErr);
+        }
+      }
+    } catch (fetchErr) {
+      console.warn(`[admin] run-google-search: fetch failed for bridge ${bridge.name}:`, fetchErr);
+    }
+  }
+
+  console.log(`[admin] run-google-search: searched=${searched} inserted=${inserted}`);
+  res.json({ success: true, searched, inserted });
+});
+
+// GET /api/admin/run-street-view — populate street_view_url for top 100 bridges without one
+router.get('/run-street-view', async (_req: Request, res: Response): Promise<void> => {
+  const apiKey = process.env['STREET_VIEW_API_KEY'];
+  if (!apiKey) {
+    res.status(500).json({ success: false, error: 'STREET_VIEW_API_KEY env var not set' });
+    return;
+  }
+
+  console.log('[admin] run-street-view: fetching top 100 bridges without street_view_url');
+  let bridges: Array<{ id: string; latitude: number; longitude: number }>;
+  try {
+    const result = await pool.query<{ id: string; latitude: number; longitude: number }>(
+      `SELECT id, latitude, longitude FROM bridges
+       WHERE street_view_url IS NULL
+       ORDER BY sri_score DESC
+       LIMIT 100`,
+    );
+    bridges = result.rows;
+  } catch (err) {
+    console.error('[admin] run-street-view: db query failed', err);
+    res.status(500).json({ success: false, error: String(err) });
+    return;
+  }
+
+  let processed = 0;
+  let found = 0;
+  let not_found = 0;
+
+  for (const bridge of bridges) {
+    const metaUrl =
+      `https://maps.googleapis.com/maps/api/streetview/metadata` +
+      `?location=${bridge.latitude},${bridge.longitude}&key=${apiKey}`;
+    try {
+      const buf = await fetchUrl(metaUrl);
+      const meta = JSON.parse(buf.toString('utf8')) as { status: string; pano_id?: string };
+      processed++;
+      if (meta.status === 'OK') {
+        const svUrl =
+          `https://maps.googleapis.com/maps/api/streetview` +
+          `?size=640x480&location=${bridge.latitude},${bridge.longitude}&key=${apiKey}`;
+        await pool.query(
+          `UPDATE bridges SET street_view_url = $1 WHERE id = $2`,
+          [svUrl, bridge.id],
+        );
+        found++;
+      } else {
+        not_found++;
+      }
+    } catch (err) {
+      console.warn(`[admin] run-street-view: error for bridge ${bridge.id}:`, err);
+      processed++;
+      not_found++;
+    }
+  }
+
+  console.log(`[admin] run-street-view: processed=${processed} found=${found} not_found=${not_found}`);
+  res.json({ success: true, processed, found, not_found });
+});
+
 // GET /api/admin/run-all-data — runs all four TS ingest functions sequentially
 router.get('/run-all-data', async (_req: Request, res: Response): Promise<void> => {
   console.log('[admin] run-all-data: starting all TS ingest functions');
