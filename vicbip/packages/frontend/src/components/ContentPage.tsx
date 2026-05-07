@@ -3,13 +3,53 @@ import type { NewsArticle } from '@vicbip/shared';
 
 const ANTHROPIC_KEY = import.meta.env['VITE_ANTHROPIC_API_KEY'] as string | undefined;
 
-const SYSTEM_PROMPT =
-  `You are the LinkedIn content writer for Freyssinet Australia, a specialist bridge ` +
-  `strengthening and post-tensioning contractor. Write a LinkedIn post (max 200 words) ` +
-  `based on this news that positions Freyssinet as a thought leader in bridge infrastructure. ` +
-  `Connect the news to bridge strengthening, asset management, or structural engineering. ` +
-  `End with 4-5 hashtags including #FreyssinetAustralia. ` +
-  `No preamble — write only the post text.`;
+const SYSTEM_PROMPT = `You are writing a LinkedIn post for Jaykerr Cheong, Business Development Engineer at Freyssinet Australia — a specialist bridge strengthening, post-tensioning, and heavy lifting contractor based in Melbourne.
+
+VOICE — match this style exactly:
+- Direct, technically credible, warm and human
+- Engineer who thinks commercially, not a marketer
+- Uses the why/what/how framework naturally
+- Comfortable with 1-2 emojis per post (not overdone)
+- Acknowledges teams and partners genuinely
+- Connects engineering detail to broader purpose
+- Occasional philosophical observation is fine
+
+REAL POST EXAMPLES to match tone:
+
+Example 1:
+"The kind of challenge Freyssinet Australia loves to tackle - Jacking critical infrastructure under occupation.
+
+Jacking works always require careful control of displacements and load paths to protect assets and keep programs moving. But for critical infrastructure, this requires an even deeper appreciation, here with live monitoring and a bespoke methodology, we deliver safe, precise and timely outcomes.
+
+If your job demands millimetre control under live conditions, we're ready!
+
+#Freyssinet #StructuralJacking #UnderOccupation #Rail #Infrastructure #TemporaryWorks"
+
+Example 2:
+"🛠 Deliver with Certainty (Especially when under pressure)
+Time-critical works demand more than just good planning, they require the right people who can perform under pressure.
+
+That's why Freyssinet was proud to support the Silk Street Bridge works with our post-tensioning crew during a tightly managed occupation. With limited a working window and zero room for error, our experienced team brought the precision, safety, and calm execution needed to get the job done right the first time.
+
+When you bring your why and what, whether it's program certainty, technical assurance, or delivery risk, we help shape the how with confidence on site.
+
+#Freyssinet #NorthEastLink #PostTensioning #WhyWeBuild #ShutdownSuccess"
+
+STRUCTURE:
+Line 1: Hook — bold statement or emoji + short punchy line. Must work before the "...more" cutoff (~200 chars). No "I'm excited" or "Great news".
+Lines 2-4: 2-3 short paragraphs. Connect the news to Freyssinet's work in bridge strengthening, asset management, post-tensioning, or CFRP. Be specific about the engineering challenge.
+Final line: 5-8 hashtags. Always include #Freyssinet. Mix specific technical tags with broader ones.
+
+RULES:
+- 150-220 words
+- 1-2 emojis maximum, used purposefully
+- No bullet points in the body
+- No words: "excited", "thrilled", "leverage", "ecosystem", "innovative", "game-changer"
+- Do not start with "I" or "We"
+- End with a warm forward-looking line or acknowledgment before the hashtags
+- Write only the post. No preamble.
+
+News to write about:`;
 
 function SkeletonCard(): React.ReactElement {
   return (
@@ -53,6 +93,8 @@ function ArticleCard({ article, draft, generating, onGenerate }: ArticleCardProp
     catch { return s; }
   };
 
+  const n = article.image_url ? 1 : 0; // offset for numbering
+
   return (
     <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm flex flex-col overflow-hidden">
       {/* Article header */}
@@ -76,6 +118,79 @@ function ArticleCard({ article, draft, generating, onGenerate }: ArticleCardProp
         <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-3">
           {article.snippet}
         </p>
+      </div>
+
+      {/* IMAGE OPTIONS — always visible, between snippet and draft */}
+      <div className="px-4 pt-3 pb-2 border-b border-slate-100 dark:border-slate-700">
+        <p
+          style={{
+            color: '#E8731A',
+            fontSize: '9px',
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            marginBottom: '6px',
+          }}
+        >
+          Image Options
+        </p>
+
+        {/* Option 1: og:image from article (conditional) */}
+        {article.image_url && (
+          <div className="mb-2">
+            <p className="text-[10px] text-slate-500 mb-1">1. Article photo (from source)</p>
+            <img
+              src={article.image_url}
+              alt="Article image"
+              className="w-full rounded object-cover mb-1"
+              style={{ height: '72px' }}
+              onError={(e) => {
+                const parent = e.currentTarget.parentElement;
+                if (parent) parent.style.display = 'none';
+              }}
+            />
+            <a
+              href={article.image_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-brand-blue hover:underline"
+            >
+              Download image ↗
+            </a>
+          </div>
+        )}
+
+        {/* Option 2: Unsplash */}
+        <div className="mb-2">
+          <p className="text-[10px] text-slate-500 mb-0.5">
+            {n + 1}. Bridge photo — Unsplash (free to use)
+          </p>
+          <a
+            href="https://unsplash.com/s/photos/bridge-infrastructure"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-brand-blue hover:underline"
+          >
+            Browse on Unsplash ↗
+          </a>
+          <span className="text-[10px] text-slate-400 italic"> · Credit photographer</span>
+        </div>
+
+        {/* Option 3: Freyssinet project photo */}
+        <div>
+          <p className="text-[10px] text-slate-500 mb-0.5">
+            {n + 2}. Freyssinet project photo (best)
+          </p>
+          <a
+            href="https://www.freyssinet.com.au/projects"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-brand-blue hover:underline"
+          >
+            Freyssinet project gallery ↗
+          </a>
+          <span className="text-[10px] text-slate-400"> · PT works, CFRP, inspection photos</span>
+        </div>
       </div>
 
       {/* LinkedIn draft area */}
@@ -112,10 +227,10 @@ function ArticleCard({ article, draft, generating, onGenerate }: ArticleCardProp
 
         {draft ? (
           <div className="flex flex-col flex-1">
-            <p className="text-xs leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap flex-1 min-h-[120px] max-h-64 overflow-y-auto mb-3">
+            <p className="text-xs leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap flex-1 min-h-[120px] max-h-72 overflow-y-auto mb-3">
               {draft}
             </p>
-            <div className="flex gap-2 mt-auto">
+            <div className="flex gap-2">
               <button
                 onClick={handleCopy}
                 className={`flex-1 text-xs py-2 rounded border transition-colors ${
@@ -134,87 +249,6 @@ function ArticleCard({ article, draft, generating, onGenerate }: ArticleCardProp
               >
                 Post to LinkedIn →
               </a>
-            </div>
-
-            {/* IMAGE SUGGESTIONS */}
-            <div className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3">
-              <p
-                style={{
-                  color: '#E8731A',
-                  fontSize: '9px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  marginBottom: '6px',
-                }}
-              >
-                Image Options
-              </p>
-
-              {/* Option 1: og:image from article */}
-              {article.image_url && (
-                <div className="mb-3">
-                  <p className="text-[10px] text-slate-500 mb-1">
-                    1. Article photo (real, from source)
-                  </p>
-                  <img
-                    src={article.image_url}
-                    alt="Article image"
-                    className="w-full rounded object-cover mb-1"
-                    style={{ height: '80px' }}
-                    onError={(e) => {
-                      const parent = e.currentTarget.parentElement;
-                      if (parent) parent.style.display = 'none';
-                    }}
-                  />
-                  <a
-                    href={article.image_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] text-brand-blue hover:underline"
-                  >
-                    Download image ↗
-                  </a>
-                </div>
-              )}
-
-              {/* Option 2: Unsplash */}
-              <div className="mb-3">
-                <p className="text-[10px] text-slate-500 mb-1">
-                  {article.image_url ? '2.' : '1.'} Real bridge photo (Unsplash — free to use)
-                </p>
-                <a
-                  href="https://unsplash.com/s/photos/bridge-infrastructure"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-brand-blue hover:underline block"
-                >
-                  Browse bridge photos on Unsplash ↗
-                </a>
-                <p className="text-[10px] text-slate-400 italic">
-                  Free to use. Credit photographer in post.
-                </p>
-              </div>
-
-              {/* Option 3: Freyssinet project photo */}
-              <div>
-                <p className="text-[10px] text-slate-500 mb-1">
-                  {article.image_url ? '3.' : '2.'} Freyssinet project photo (best option)
-                </p>
-                <p className="text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                  Use a real photo from a Freyssinet AU project. Check your internal project
-                  library for: post-tensioning works, CFRP installation, or bridge inspection
-                  photos.
-                </p>
-                <a
-                  href="https://www.freyssinet.com.au/projects"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-brand-blue hover:underline"
-                >
-                  Freyssinet project gallery ↗
-                </a>
-              </div>
             </div>
           </div>
         ) : (
@@ -268,7 +302,7 @@ export function ContentPage(): React.ReactElement {
           max_tokens: 400,
           messages: [{
             role: 'user',
-            content: `${SYSTEM_PROMPT}\n\nTitle: ${article.title}\nSnippet: ${article.snippet}`,
+            content: `${SYSTEM_PROMPT}\nTitle: ${article.title}\nSnippet: ${article.snippet}`,
           }],
         }),
       });
