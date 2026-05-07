@@ -741,6 +741,114 @@ router.get('/run-all-data', async (_req: Request, res: Response): Promise<void> 
   res.status(allOk ? 200 : 500).json({ success: allOk, duration_ms: Date.now() - t0, results });
 });
 
+// GET /api/admin/seed-budget
+// Inserts confirmed budget allocations and fuzzy-matches them to bridges.
+router.get('/seed-budget', async (_req: Request, res: Response): Promise<void> => {
+  interface AllocationRow {
+    program_name: string;
+    funding_tier: string;
+    funding_body: string;
+    amount_aud: number | null;
+    financial_year: string;
+    structure_named: string;
+    status: string;
+    source_url: string;
+    bridge_id?: string | null;
+  }
+
+  const allocations: AllocationRow[] = [
+    {
+      program_name: 'Better Roads Blitz',
+      funding_tier: 'state',
+      funding_body: 'DTP Victoria',
+      amount_aud: null,
+      financial_year: '2025-26',
+      structure_named: 'San Remo Bridge',
+      status: 'confirmed',
+      source_url: 'https://www.budget.vic.gov.au/strong-regional-victoria',
+    },
+    {
+      program_name: 'Better Roads Blitz',
+      funding_tier: 'state',
+      funding_body: 'DTP Victoria',
+      amount_aud: null,
+      financial_year: '2025-26',
+      structure_named: 'Mt Emu Creek Bridge',
+      status: 'confirmed',
+      source_url: 'https://www.budget.vic.gov.au/strong-regional-victoria',
+    },
+    {
+      program_name: 'Metropolitan Road Network',
+      funding_tier: 'state',
+      funding_body: 'DTP Victoria',
+      amount_aud: 38_000_000,
+      financial_year: '2025-26',
+      structure_named: 'West Gate Bridge',
+      status: 'confirmed',
+      source_url: 'https://www.budget.vic.gov.au/transport-network',
+    },
+  ];
+
+  // Fuzzy match: find bridge ids for named structures
+  const matchRes = await pool.query<{ id: string; name: string }>(
+    `SELECT id, name FROM bridges
+     WHERE LOWER(name) LIKE '%san remo%'
+        OR LOWER(name) LIKE '%emu creek%'
+        OR LOWER(name) LIKE '%west gate%'
+        OR LOWER(name) LIKE '%westgate%'`,
+  );
+  const matchedBridges = matchRes.rows;
+
+  // Map structure keyword → bridge id
+  const keywordMap: Record<string, string> = {};
+  for (const b of matchedBridges) {
+    const n = b.name.toLowerCase();
+    if (n.includes('san remo')) keywordMap['San Remo Bridge'] = b.id;
+    if (n.includes('emu creek') || n.includes('mt emu')) keywordMap['Mt Emu Creek Bridge'] = b.id;
+    if (n.includes('west gate') || n.includes('westgate')) keywordMap['West Gate Bridge'] = b.id;
+  }
+
+  let inserted = 0;
+  const matchedNames: string[] = [];
+
+  for (const alloc of allocations) {
+    const bridgeId = keywordMap[alloc.structure_named] ?? null;
+    try {
+      const r = await pool.query(
+        `INSERT INTO budget_allocations
+           (bridge_id, program_name, funding_tier, funding_body, amount_aud,
+            financial_year, structure_named, status, source_url)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT (program_name,
+           COALESCE(structure_named,''),
+           COALESCE(financial_year,'')) DO NOTHING
+         RETURNING id`,
+        [bridgeId, alloc.program_name, alloc.funding_tier, alloc.funding_body,
+         alloc.amount_aud, alloc.financial_year, alloc.structure_named,
+         alloc.status, alloc.source_url],
+      );
+      if ((r.rowCount ?? 0) > 0) inserted++;
+    } catch (err) {
+      console.warn('[seed-budget] insert error:', String(err).slice(0, 100));
+    }
+  }
+
+  // Set has_budget_allocation = true on matched bridges
+  const matchedIds = Object.values(keywordMap);
+  if (matchedIds.length > 0) {
+    await pool.query(
+      `UPDATE bridges SET has_budget_allocation = true WHERE id = ANY($1::uuid[])`,
+      [matchedIds],
+    );
+    for (const b of matchedBridges) {
+      if (matchedIds.includes(b.id)) matchedNames.push(b.name);
+    }
+  }
+
+  console.log(`[seed-budget] inserted=${inserted} matched_bridges=${matchedNames.length}`);
+  res.json({ success: true, inserted, matched_bridges: matchedNames });
+});
+
 // GET /api/admin/seed-prequal
 // Inserts the DTP prequalification company register (contractors + consultants).
 // ON CONFLICT (company_name) DO NOTHING — safe to re-run.

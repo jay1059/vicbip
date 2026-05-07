@@ -5,6 +5,7 @@ import { computeSolutionMatch } from '../utils/solutionMatch';
 import type {
   BridgeGeoJSONCollection,
   BridgeDetail,
+  BudgetAllocation,
   BridgePrequal,
   PrequalCompanySummary,
   BridgeStats,
@@ -142,6 +143,10 @@ const BridgeFiltersSchema = z.object({
     .string()
     .optional()
     .transform((v) => v === 'true'),
+  has_budget_allocation: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
 });
 
 const ExportFiltersSchema = BridgeFiltersSchema.extend({
@@ -219,6 +224,10 @@ function buildWhere(filters: z.infer<typeof BridgeFiltersSchema>): {
     );
   }
 
+  if (filters.has_budget_allocation) {
+    conditions.push('bridges.has_budget_allocation = true');
+  }
+
   return {
     where: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
     params,
@@ -242,6 +251,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         b.id, b.name, b.road_name, b.bridge_type, b.construction_year, b.span_m,
         b.owner_name, b.owner_category, b.sri_score, b.risk_tier, b.freyssinet_works,
         b.latitude, b.longitude,
+        b.has_budget_allocation,
         (b.bridge_id ILIKE 'SN%') AS is_sn,
         EXISTS (SELECT 1 FROM bridge_tenders bt WHERE bt.bridge_id = b.id) AS has_tenders
        FROM bridges b
@@ -272,6 +282,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
           freyssinet_works: row.freyssinet_works as boolean,
           is_sn: row.is_sn as boolean,
           has_tenders: row.has_tenders as boolean,
+          has_budget_allocation: (row.has_budget_allocation as boolean) ?? false,
         },
       })),
     };
@@ -447,7 +458,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   const id = parsed.data;
 
   try {
-    const [bridgeRes, trafficRes, crashRes, eventsRes, tendersRes, intelligenceRes] =
+    const [bridgeRes, trafficRes, crashRes, eventsRes, tendersRes, intelligenceRes, budgetRes] =
       await Promise.all([
         pool.query(`SELECT * FROM bridges WHERE id = $1`, [id]),
         pool.query(
@@ -475,6 +486,10 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
            ORDER BY collected_at DESC LIMIT 10`,
           [id],
         ),
+        pool.query(
+          `SELECT * FROM budget_allocations WHERE bridge_id = $1 ORDER BY financial_year DESC`,
+          [id],
+        ).catch(() => ({ rows: [] })),
       ]);
 
     if (bridgeRes.rows.length === 0) {
@@ -520,6 +535,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       data_sources: bridge['data_sources'] as string[] | null,
       notes: bridge['notes'] as string | null,
       last_ingested: bridge['last_ingested'] as string,
+      has_budget_allocation: (bridge['has_budget_allocation'] as boolean) ?? false,
       traffic: trafficRes.rows.length > 0 ? (trafficRes.rows[0] as BridgeDetail['traffic']) : null,
       crash_summary: crashRes.rows.length > 0 ? (crashRes.rows[0] as BridgeCrashSummary) : null,
       events: eventsRes.rows as BridgeDetail['events'],
@@ -527,6 +543,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       intelligence: intelligenceRes.rows as BridgeDetail['intelligence'],
       solution_match,
       prequal,
+      budget: budgetRes.rows as BudgetAllocation[],
     };
 
     res.json(detail);

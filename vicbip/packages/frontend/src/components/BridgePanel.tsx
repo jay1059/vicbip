@@ -938,6 +938,81 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
         );
       })()}
 
+      {/* Section K — Budget & Funding Signals (all bridges) */}
+      {(() => {
+        const hasBudget = bridge.has_budget_allocation && bridge.budget && bridge.budget.length > 0;
+        const isSlripEligible =
+          bridge.owner_category === 'local_govt' &&
+          bridge.sri_score >= 40 &&
+          (bridge.construction_year ?? 2000) <= 1985;
+
+        if (!hasBudget && !isSlripEligible) return null;
+
+        const fmtAud = (v: number) =>
+          v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(0)}M` : `$${Math.round(v / 1000)}K`;
+
+        return (
+          <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+            <Section title="Budget & Funding Signals">
+              <div className="space-y-3">
+                {/* SLRIP eligibility banner */}
+                {isSlripEligible && (
+                  <div className="p-3 rounded border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 uppercase tracking-wide">
+                        SLRIP Eligible
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-800 dark:text-amber-200">
+                      This bridge may qualify for federal{' '}
+                      <span className="font-semibold">Safer Local Roads and Infrastructure Program</span>{' '}
+                      funding.
+                    </p>
+                  </div>
+                )}
+
+                {/* Confirmed budget allocation cards */}
+                {hasBudget && bridge.budget!.map((alloc) => (
+                  <div
+                    key={alloc.id}
+                    className="p-3 rounded border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/10"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 uppercase tracking-wide">
+                        FUNDED {alloc.financial_year ?? ''}
+                      </span>
+                      {alloc.amount_aud != null && (
+                        <span className="text-sm font-bold text-green-700 dark:text-green-300">
+                          {fmtAud(alloc.amount_aud)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      {alloc.program_name}
+                    </p>
+                    {alloc.funding_body && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {alloc.funding_body}
+                      </p>
+                    )}
+                    {alloc.source_url && (
+                      <a
+                        href={alloc.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-brand-blue hover:underline mt-1 inline-block"
+                      >
+                        Budget source ↗
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          </div>
+        );
+      })()}
+
       {/* Section J — Asset Owner Decision Framework */}
       {(() => {
         const tier = bridge.risk_tier?.toLowerCase();

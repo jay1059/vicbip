@@ -261,6 +261,25 @@ export function FilterPanel(): React.ReactElement {
           </div>
         </fieldset>
 
+        {/* Budget Allocation filter */}
+        <fieldset>
+          <legend className="section-header w-full">Budget Allocation</legend>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filters.has_budget_allocation ?? false}
+                onChange={(e) => filters.setHasBudgetAllocation(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              <span className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                <span className="text-green-600 font-bold text-base leading-none">$</span>
+                Has budget allocation
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
         {/* Freyssinet toggles */}
         <fieldset>
           <legend className="section-header w-full">Freyssinet Works</legend>

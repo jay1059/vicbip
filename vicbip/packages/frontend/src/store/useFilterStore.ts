@@ -11,6 +11,7 @@ interface FilterState extends BridgeFilters {
   setBridgeType: (types: string[]) => void;
   setSnOnly: (v: boolean) => void;
   setHasTenders: (v: boolean) => void;
+  setHasBudgetAllocation: (v: boolean) => void;
   resetFilters: () => void;
   bridgeTypeFilter: string[];
 }
@@ -27,6 +28,7 @@ const defaultFilters: BridgeFilters = {
   exclude_freyssinet: false,
   sn_only: false,
   has_tenders: false,
+  has_budget_allocation: false,
 };
 
 export const useFilterStore = create<FilterState>((set) => ({
@@ -43,5 +45,6 @@ export const useFilterStore = create<FilterState>((set) => ({
   setBridgeType: (types) => set({ bridgeTypeFilter: types }),
   setSnOnly: (v) => set({ sn_only: v }),
   setHasTenders: (v) => set({ has_tenders: v }),
+  setHasBudgetAllocation: (v) => set({ has_budget_allocation: v }),
   resetFilters: () => set({ ...defaultFilters, bridgeTypeFilter: [] }),
 }));

@@ -36,6 +36,21 @@ export interface Bridge {
   data_sources: string[] | null;
   notes: string | null;
   last_ingested: string;
+  has_budget_allocation: boolean;
+}
+
+export interface BudgetAllocation {
+  id: string;
+  bridge_id: string | null;
+  program_name: string;
+  funding_tier: string | null;
+  funding_body: string | null;
+  amount_aud: number | null;
+  financial_year: string | null;
+  structure_named: string | null;
+  status: string | null;
+  source_url: string | null;
+  created_at: string;
 }
 
 export interface GeoJSONPoint {
@@ -116,6 +131,7 @@ export interface BridgeFeatureProperties {
   freyssinet_works: boolean;
   is_sn: boolean;
   has_tenders: boolean;
+  has_budget_allocation: boolean;
 }
 
 export interface BridgeGeoJSONFeature {
@@ -153,6 +169,7 @@ export interface BridgeDetail extends Bridge {
   intelligence: BridgeIntelligence[];
   solution_match: string[];
   prequal: BridgePrequal | null;
+  budget: BudgetAllocation[];
 }
 
 export interface BridgeStats {
@@ -190,4 +207,5 @@ export interface BridgeFilters {
   exclude_freyssinet?: boolean;
   sn_only?: boolean;
   has_tenders?: boolean;
+  has_budget_allocation?: boolean;
 }

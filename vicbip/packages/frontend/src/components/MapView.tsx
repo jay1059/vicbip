@@ -148,6 +148,25 @@ export function MapView(): React.ReactElement {
         },
       });
 
+      // Budget allocation badge — green '$' symbol above funded bridge markers
+      map.addLayer({
+        id: 'budget-badge',
+        type: 'symbol',
+        source: 'bridges',
+        filter: ['==', ['get', 'has_budget_allocation'], true],
+        layout: {
+          'text-field': '$',
+          'text-size': 14,
+          'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
+          'text-offset': [0.8, -0.8],
+        },
+        paint: {
+          'text-color': '#16A34A',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1,
+        },
+      });
+
       mapRef.current = map;
 
       // Start pulse animation for tender bridges
@@ -239,6 +258,9 @@ export function MapView(): React.ReactElement {
     map.setLayoutProperty('bridge-heatmap', 'visibility', showHeat);
     map.setLayoutProperty('bridge-points', 'visibility', showPoints);
     map.setLayoutProperty('bridge-points-tender', 'visibility', showPoints);
+    if (map.getLayer('budget-badge')) {
+      map.setLayoutProperty('budget-badge', 'visibility', showPoints);
+    }
 
     // Pause/resume pulse RAF
     if (isHeatmapEnabled) {
@@ -315,6 +337,10 @@ export function MapView(): React.ReactElement {
         <div className="flex items-center gap-2 mt-1">
           <span className="w-3 h-3 rounded-full border-2 border-white bg-slate-400 ring-1 ring-slate-400" aria-hidden="true" />
           <span className="text-xs text-slate-500 dark:text-slate-400">SN bridge</span>
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-green-600 font-bold text-sm leading-none w-3 text-center" aria-hidden="true">$</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">Budget allocation</span>
         </div>
       </div>
     </div>
