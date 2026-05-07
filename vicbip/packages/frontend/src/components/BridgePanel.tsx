@@ -754,7 +754,7 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
       {(() => {
         const tier = bridge.risk_tier?.toLowerCase();
         const sri = bridge.sri_score ?? 0;
-        const show = tier === 'critical' || tier === 'high' || sri >= 60 || true;
+        const show = tier === 'critical' || tier === 'high' || sri >= 60;
         if (!show) return null;
         return (
           <div className="p-4">
