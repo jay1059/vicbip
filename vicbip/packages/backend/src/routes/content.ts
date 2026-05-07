@@ -24,6 +24,33 @@ function extractDomain(url: string): string {
   }
 }
 
+const FALLBACK_ARTICLES: NewsArticle[] = [
+  {
+    title: 'Inland Rail extension to Brisbane scrapped after cost blowout to $45 billion',
+    url: 'https://bigrigs.com.au/2026/05/06/plans-scrapped-to-extend-inland-rail-project-to-brisbane/',
+    snippet:
+      'The federal government has scrapped plans to extend Inland Rail to Brisbane after costs blew out to over $45 billion — more than three times the original budget. The line will now terminate at Parkes in central west NSW.',
+    source: 'bigrigs.com.au',
+    published: '2026-05-06',
+  },
+  {
+    title: 'New Bridgewater Bridge opens in Tasmania — $786M project replaces 1940s structure',
+    url: 'https://australiatimes.com/new-bridgewater-bridge-opens-in-tasmania-enhancing-connectivity-and-infrastructure',
+    snippet:
+      "Tasmania's largest ever transport infrastructure project has officially opened, replacing a bridge from the 1940s and a convicts-built causeway from the 1830s. The $786M project was delivered on time and within budget supporting approximately 1,000 jobs.",
+    source: 'australiatimes.com',
+    published: '2026-05-01',
+  },
+  {
+    title: 'Australian bridge construction market to reach $50.6 billion by 2034',
+    url: 'https://vocal.media/trader/australia-bridge-construction-market-2026',
+    snippet:
+      'The Australia bridge construction market reached USD $34.7 billion in 2025 and is projected to reach USD $50.6 billion by 2034, driven by the need to upgrade ageing bridge structures and meet modern safety standards.',
+    source: 'vocal.media',
+    published: '2026-04-15',
+  },
+];
+
 // GET /api/content/linkedin-feed
 router.get('/linkedin-feed', async (req: Request, res: Response): Promise<void> => {
   const refresh = req.query['refresh'] === 'true';
@@ -36,11 +63,12 @@ router.get('/linkedin-feed', async (req: Request, res: Response): Promise<void> 
   const apiKey = process.env['GOOGLE_SEARCH_API_KEY'];
   const cx = process.env['GOOGLE_SEARCH_CX'];
 
+  console.log('[content] GOOGLE_SEARCH_API_KEY:', apiKey ? 'SET' : 'MISSING');
+  console.log('[content] GOOGLE_SEARCH_CX:', cx ? 'SET' : 'MISSING');
+
   if (!apiKey || !cx) {
-    res.status(500).json({
-      error: 'GOOGLE_SEARCH_API_KEY or GOOGLE_SEARCH_CX not configured',
-      articles: [],
-    });
+    console.warn('[content] API keys missing — returning fallback articles');
+    res.json({ articles: FALLBACK_ARTICLES, generated_at: new Date().toISOString(), cached: false, fallback: true });
     return;
   }
 
@@ -96,12 +124,13 @@ router.get('/linkedin-feed', async (req: Request, res: Response): Promise<void> 
     }),
   );
 
-  const result = articles.slice(0, 9);
+  const result = articles.length > 0 ? articles.slice(0, 9) : FALLBACK_ARTICLES;
   const generatedAt = new Date().toISOString();
   cache = { data: result, ts: Date.now() };
 
-  console.log(`[content] linkedin-feed: fetched ${result.length} articles`);
-  res.json({ articles: result, generated_at: generatedAt, cached: false });
+  const usedFallback = articles.length === 0;
+  console.log(`[content] linkedin-feed: ${result.length} articles (fallback=${usedFallback})`);
+  res.json({ articles: result, generated_at: generatedAt, cached: false, fallback: usedFallback });
 });
 
 export default router;

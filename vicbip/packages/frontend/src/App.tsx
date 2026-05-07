@@ -6,7 +6,7 @@ import { DashboardView } from './components/DashboardView';
 import { AdminPanel } from './components/AdminPanel';
 import { BridgePanel } from './components/BridgePanel';
 import { Disclaimer } from './components/Disclaimer';
-import { ContentFeed } from './components/ContentFeed';
+import { ContentPage } from './components/ContentPage';
 import { useAppStore } from './store/useAppStore';
 
 function App(): React.ReactElement {
@@ -44,12 +44,19 @@ function App(): React.ReactElement {
           >
             <AdminPanel />
           </div>
+          <div
+            className={`absolute inset-0 transition-opacity duration-200 overflow-hidden ${
+              activeTab === 'content' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+            }`}
+            aria-hidden={activeTab !== 'content'}
+          >
+            <ContentPage />
+          </div>
         </main>
       </div>
 
       <BridgePanel />
       <Disclaimer />
-      <ContentFeed />
     </div>
   );
 }
