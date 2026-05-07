@@ -812,6 +812,28 @@ export function BridgePanel(): React.ReactElement {
   const { selectedBridgeId, setSelectedBridgeId } = useAppStore();
   const isOpen = !!selectedBridgeId;
 
+const [panelWidth, setPanelWidth] = React.useState(520);
+const isResizing = React.useRef(false);
+
+const startResize = (e: React.MouseEvent) => {
+  isResizing.current = true;
+  const startX = e.clientX;
+  const startWidth = panelWidth;
+  const onMouseMove = (e: MouseEvent) => {
+    if (!isResizing.current) return;
+    const delta = startX - e.clientX;
+    const newWidth = Math.min(800, Math.max(360, startWidth + delta));
+    setPanelWidth(newWidth);
+  };
+  const onMouseUp = () => {
+    isResizing.current = false;
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+  };
+  window.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('mouseup', onMouseUp);
+};
+  
   const { data: bridge, isLoading, error } = useQuery({
     queryKey: ['bridge', selectedBridgeId],
     queryFn: () => fetchBridgeDetail(selectedBridgeId!),
@@ -819,13 +841,20 @@ export function BridgePanel(): React.ReactElement {
   });
 
   return (
-    <aside
-      className={`fixed top-14 right-0 bottom-8 w-[480px] min-w-[480px] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 z-20 flex flex-col shadow-2xl transition-transform duration-300 ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
-      }`}
-      aria-label="Bridge detail panel"
-      aria-hidden={!isOpen}
-    >
+ <aside
+  className={`fixed top-14 right-0 bottom-8 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 z-20 flex flex-col shadow-2xl transition-transform duration-300 ${
+    isOpen ? 'translate-x-0' : 'translate-x-full'
+  }`}
+  style={{ width: `${panelWidth}px`, minWidth: '360px', maxWidth: '800px' }}
+  aria-label="Bridge detail panel"
+  aria-hidden={!isOpen}
+>
+  {/* Drag handle */}
+  <div
+    onMouseDown={startResize}
+    className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 transition-colors z-30"
+    title="Drag to resize panel"
+  />
       {isOpen && (
         <>
           {/* Panel Header */}
