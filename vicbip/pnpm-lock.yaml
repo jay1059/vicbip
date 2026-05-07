@@ -11,6 +11,9 @@ importers:
       concurrently:
         specifier: ^8.2.2
         version: 8.2.2
+      only-allow:
+        specifier: ^1.2.2
+        version: 1.2.2
 
   packages/backend:
     dependencies:
@@ -1456,6 +1459,10 @@ packages:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
+  only-allow@1.2.2:
+    resolution: {integrity: sha512-uxyNYDsCh5YIJ780G7hC5OHjVUr9reHsbZNMM80L9tZlTpb3hUzb36KXgW4ZUGtJKQnGA3xegmWg1BxhWV0jJA==}
+    hasBin: true
+
   p-limit@5.0.0:
     resolution: {integrity: sha512-/Eaoq+QyLSiXQ4lyYV23f14mZRQcXnxfHrN0vCai+ak9G0pp9iEQukIIZq5NccEvwRB8PUnZT0KsOoDCINS1qQ==}
     engines: {node: '>=18'}
@@ -2066,6 +2073,10 @@ packages:
         optional: true
       jsdom:
         optional: true
+
+  which-pm-runs@1.1.0:
+    resolution: {integrity: sha512-n1brCuqClxfFfq/Rb0ICg9giSZqCS+pLtccdag6C2HyufBrh3fBOiy9nb6ggRMvWOVH5GrdJskj5iGTZNxd7SA==}
+    engines: {node: '>=4'}
 
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
@@ -3389,6 +3400,10 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
+  only-allow@1.2.2:
+    dependencies:
+      which-pm-runs: 1.1.0
+
   p-limit@5.0.0:
     dependencies:
       yocto-queue: 1.2.2
@@ -4040,6 +4055,8 @@ snapshots:
       - sugarss
       - supports-color
       - terser
+
+  which-pm-runs@1.1.0: {}
 
   which@2.0.2:
     dependencies:

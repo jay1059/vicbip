@@ -11,6 +11,7 @@
     "test": "pnpm --filter backend test"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "only-allow": "^1.2.2"
   }
 }

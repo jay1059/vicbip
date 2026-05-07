@@ -291,12 +291,6 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      {/* DEBUG — remove after confirming field names in production */}
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <div style={{ fontSize: '10px', color: 'red', padding: '4px', background: '#fff9f9' }}>
-        {`DEBUG: risk_tier=${String(bridge.risk_tier)} | sri=${String((bridge as any).sri_score ?? (bridge as any).sri)} | span=${String((bridge as any).span_m ?? (bridge as any).span)}`}
-      </div>
-
       {/* Tender active badge */}
       {hasRecentTender && (
         <div className="px-4 pt-3 pb-0">
@@ -756,19 +750,18 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
         </Section>
       </div>
 
-      {/* Section J — Asset Owner Decision Framework (critical/high only) */}
-      {/* Option A: case-insensitive risk_tier (handles 'critical', 'Critical', etc.)
-          Option B: sri_score >= 60 (handles NULL risk_tier from DTP bridges)
-          Option C: (bridge as any).sri fallback in case API key ever differs */}
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      {(bridge.risk_tier?.toLowerCase() === 'critical' ||
-        bridge.risk_tier?.toLowerCase() === 'high' ||
-        (bridge.sri_score ?? 0) >= 60 ||
-        ((bridge as any).sri ?? 0) >= 60) && (
-        <div className="p-4">
-          <SectionJCostMatrix bridge={bridge} />
-        </div>
-      )}
+      {/* Section J — Asset Owner Decision Framework */}
+      {(() => {
+        const tier = bridge.risk_tier?.toLowerCase();
+        const sri = bridge.sri_score ?? 0;
+        const show = tier === 'critical' || tier === 'high' || sri >= 60;
+        if (!show) return null;
+        return (
+          <div className="p-4">
+            <SectionJCostMatrix bridge={bridge} />
+          </div>
+        );
+      })()}
     </div>
   );
 }
