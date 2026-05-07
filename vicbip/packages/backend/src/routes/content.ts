@@ -24,6 +24,31 @@ function extractDomain(url: string): string {
   }
 }
 
+async function getArticleImage(url: string): Promise<string | null> {
+  try {
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VicBIP/1.0)' },
+      signal: AbortSignal.timeout(5_000),
+      redirect: 'follow',
+    });
+    if (!resp.ok) return null;
+    const html = await resp.text();
+    const match =
+      html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i) ??
+      html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:image"/i) ??
+      html.match(/<meta[^>]+name="twitter:image"[^>]+content="([^"]+)"/i) ??
+      html.match(/<meta[^>]+content="([^"]+)"[^>]+name="twitter:image"/i);
+    const src = match?.[1] ?? null;
+    // Resolve relative URLs
+    if (src && !src.startsWith('http')) {
+      try { return new URL(src, url).href; } catch { return null; }
+    }
+    return src;
+  } catch {
+    return null;
+  }
+}
+
 const FALLBACK_ARTICLES: NewsArticle[] = [
   {
     title: 'Inland Rail extension to Brisbane scrapped after cost blowout to $45 billion',
@@ -32,6 +57,7 @@ const FALLBACK_ARTICLES: NewsArticle[] = [
       'The federal government has scrapped plans to extend Inland Rail to Brisbane after costs blew out to over $45 billion — more than three times the original budget. The line will now terminate at Parkes in central west NSW.',
     source: 'bigrigs.com.au',
     published: '2026-05-06',
+    image_url: null,
   },
   {
     title: 'New Bridgewater Bridge opens in Tasmania — $786M project replaces 1940s structure',
@@ -40,6 +66,7 @@ const FALLBACK_ARTICLES: NewsArticle[] = [
       "Tasmania's largest ever transport infrastructure project has officially opened, replacing a bridge from the 1940s and a convicts-built causeway from the 1830s. The $786M project was delivered on time and within budget supporting approximately 1,000 jobs.",
     source: 'australiatimes.com',
     published: '2026-05-01',
+    image_url: null,
   },
   {
     title: 'Australian bridge construction market to reach $50.6 billion by 2034',
@@ -48,6 +75,7 @@ const FALLBACK_ARTICLES: NewsArticle[] = [
       'The Australia bridge construction market reached USD $34.7 billion in 2025 and is projected to reach USD $50.6 billion by 2034, driven by the need to upgrade ageing bridge structures and meet modern safety standards.',
     source: 'vocal.media',
     published: '2026-04-15',
+    image_url: null,
   },
 ];
 
@@ -110,12 +138,19 @@ router.get('/linkedin-feed', async (req: Request, res: Response): Promise<void> 
             metatags['og:updated_time'] ??
             metatags['date'] ??
             '';
+          // Try to get image from CSE pagemap first (free, already fetched)
+          const cseImage =
+            (item.pagemap as Record<string, unknown> | undefined)?.['cse_image'] as
+              Array<{ src?: string }> | undefined;
+          const metaImage = metatags['og:image'] ?? metatags['twitter:image'] ?? null;
+          const quickImage = cseImage?.[0]?.src ?? metaImage ?? null;
           articles.push({
             title: item.title,
             url: item.link,
             snippet: item.snippet,
             source: extractDomain(item.link),
             published,
+            image_url: quickImage,
           });
         }
       } catch (e) {
@@ -124,7 +159,18 @@ router.get('/linkedin-feed', async (req: Request, res: Response): Promise<void> 
     }),
   );
 
-  const result = articles.length > 0 ? articles.slice(0, 9) : FALLBACK_ARTICLES;
+  const preResult = articles.length > 0 ? articles.slice(0, 9) : FALLBACK_ARTICLES;
+
+  // Fetch og:image for articles that didn't get one from CSE pagemap
+  const withImages = await Promise.all(
+    preResult.map(async (article) => {
+      if (article.image_url) return article;
+      const image_url = await getArticleImage(article.url);
+      return { ...article, image_url };
+    }),
+  );
+
+  const result = withImages;
   const generatedAt = new Date().toISOString();
   cache = { data: result, ts: Date.now() };
 

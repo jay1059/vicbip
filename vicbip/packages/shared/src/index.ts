@@ -201,6 +201,7 @@ export interface NewsArticle {
   snippet: string;
   source: string;
   published: string;
+  image_url: string | null;
 }
 
 export interface BridgeFilters {

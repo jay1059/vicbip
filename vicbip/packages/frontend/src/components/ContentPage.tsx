@@ -135,6 +135,87 @@ function ArticleCard({ article, draft, generating, onGenerate }: ArticleCardProp
                 Post to LinkedIn →
               </a>
             </div>
+
+            {/* IMAGE SUGGESTIONS */}
+            <div className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3">
+              <p
+                style={{
+                  color: '#E8731A',
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginBottom: '6px',
+                }}
+              >
+                Image Options
+              </p>
+
+              {/* Option 1: og:image from article */}
+              {article.image_url && (
+                <div className="mb-3">
+                  <p className="text-[10px] text-slate-500 mb-1">
+                    1. Article photo (real, from source)
+                  </p>
+                  <img
+                    src={article.image_url}
+                    alt="Article image"
+                    className="w-full rounded object-cover mb-1"
+                    style={{ height: '80px' }}
+                    onError={(e) => {
+                      const parent = e.currentTarget.parentElement;
+                      if (parent) parent.style.display = 'none';
+                    }}
+                  />
+                  <a
+                    href={article.image_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-brand-blue hover:underline"
+                  >
+                    Download image ↗
+                  </a>
+                </div>
+              )}
+
+              {/* Option 2: Unsplash */}
+              <div className="mb-3">
+                <p className="text-[10px] text-slate-500 mb-1">
+                  {article.image_url ? '2.' : '1.'} Real bridge photo (Unsplash — free to use)
+                </p>
+                <a
+                  href="https://unsplash.com/s/photos/bridge-infrastructure"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-brand-blue hover:underline block"
+                >
+                  Browse bridge photos on Unsplash ↗
+                </a>
+                <p className="text-[10px] text-slate-400 italic">
+                  Free to use. Credit photographer in post.
+                </p>
+              </div>
+
+              {/* Option 3: Freyssinet project photo */}
+              <div>
+                <p className="text-[10px] text-slate-500 mb-1">
+                  {article.image_url ? '3.' : '2.'} Freyssinet project photo (best option)
+                </p>
+                <p className="text-[10px] text-slate-600 dark:text-slate-400 mb-1">
+                  Use a real photo from a Freyssinet AU project. Check your internal project
+                  library for: post-tensioning works, CFRP installation, or bridge inspection
+                  photos.
+                </p>
+                <a
+                  href="https://www.freyssinet.com.au/projects"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-brand-blue hover:underline"
+                >
+                  Freyssinet project gallery ↗
+                </a>
+              </div>
+            </div>
           </div>
         ) : (
           <p className="text-xs text-slate-400 dark:text-slate-500 italic">
@@ -273,7 +354,7 @@ export function ContentPage(): React.ReactElement {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
             {articles.map((article) => (
               <ArticleCard
                 key={article.url}
