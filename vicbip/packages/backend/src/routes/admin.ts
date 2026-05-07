@@ -741,6 +741,24 @@ router.get('/run-all-data', async (_req: Request, res: Response): Promise<void> 
   res.status(allOk ? 200 : 500).json({ success: allOk, duration_ms: Date.now() - t0, results });
 });
 
+// GET /api/admin/reset-street-view
+// Clears all stored street_view_url values so the next run-street-view
+// pass will re-check every bridge (useful after API key changes or
+// if imagery coverage has improved).
+router.get('/reset-street-view', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await pool.query(
+      `UPDATE bridges SET street_view_url = NULL WHERE street_view_url IS NOT NULL`,
+    );
+    const resetCount = result.rowCount ?? 0;
+    console.log(`[reset-street-view] cleared street_view_url on ${resetCount} bridges`);
+    res.json({ success: true, reset: resetCount });
+  } catch (err) {
+    console.error('[reset-street-view] error:', err);
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
 // GET /api/admin/run-street-view
 // Batch-populates street_view_url for bridges that don't have one yet.
 // Checks the free metadata endpoint first, only sets the image URL when a

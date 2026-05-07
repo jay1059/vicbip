@@ -301,8 +301,10 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
         </div>
       )}
 
-      {/* Street View Hero */}
-      {bridge.street_view_url && bridge.street_view_url !== 'NONE' ? (
+      {/* Street View Hero — only rendered when a valid image URL is stored */}
+      {bridge.street_view_url &&
+        bridge.street_view_url !== 'NONE' &&
+        bridge.street_view_url.startsWith('http') && (
         <div className="relative">
           <img
             src={bridge.street_view_url}
@@ -320,14 +322,6 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
           >
             View on Google Maps ↗
           </a>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center h-24 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 gap-1.5">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-            <circle cx="12" cy="13" r="4" />
-          </svg>
-          <span className="text-xs">No street imagery available</span>
         </div>
       )}
 

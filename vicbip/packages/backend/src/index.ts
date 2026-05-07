@@ -109,6 +109,7 @@ const endpoints = [
   ['Run Disruptions','run-disruptions','#92400E'],
   ['Run Tender Scraper','run-tender-scrape','#5B21B6'],
   ['Run Street View (100 bridges)','run-street-view','#1B4F8C'],
+  ['Reset Street View (clear all)','reset-street-view','#991B1B'],
   ['Run All Data','run-all-data','#92400E']
 ];
 const div = document.getElementById('actions');
