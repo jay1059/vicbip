@@ -43,10 +43,11 @@ const adminHtml = `<!DOCTYPE html>
 </head>
 <body>
 <h2>VicBIP Admin Panel</h2>
-<p class="sub">Server-rendered — no React bundle required. <a href="/" style="color:#60a5fa">&#8592; Back to app</a></p>
-
-<h3>Pipeline Actions</h3>
-<div id="actions"></div>
+<p class="sub">
+  <a href="https://vicbip.up.railway.app" target="_blank" style="color:#60a5fa">↗ Open VicBIP live site</a>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="/" style="color:#60a5fa">← Back to app</a>
+</p>
 
 <h3>Manual Tender Entry</h3>
 <p class="sub">Add a tender record manually and optionally link it to a bridge.</p>
@@ -92,6 +93,9 @@ const adminHtml = `<!DOCTYPE html>
   <button type="submit" class="submit-btn">Add Tender</button>
 </form>
 <div id="tender-result"></div>
+
+<h3>Pipeline Actions</h3>
+<div id="actions"></div>
 
 <script>
 const endpoints = [
