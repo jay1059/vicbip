@@ -101,6 +101,7 @@ const endpoints = [
   ['Run TIRTL','run-traffic-tirtl','#166534'],
   ['Run Crash Data (10min)','run-crash-data','#991B1B'],
   ['Run Disruptions','run-disruptions','#92400E'],
+  ['Run Street View (100 bridges)','run-street-view','#0F766E'],
   ['Run Tender Scraper','run-tender-scrape','#5B21B6'],
   ['Run All Data','run-all-data','#92400E']
 ];

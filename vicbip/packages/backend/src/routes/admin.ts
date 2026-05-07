@@ -741,6 +741,99 @@ router.get('/run-all-data', async (_req: Request, res: Response): Promise<void> 
   res.status(allOk ? 200 : 500).json({ success: allOk, duration_ms: Date.now() - t0, results });
 });
 
+// GET /api/admin/run-street-view
+// Batch-populates street_view_url for bridges that don't have one yet.
+// Checks the free metadata endpoint first, only sets the image URL when a
+// panorama actually exists (meta.status === 'OK').  Bridges with no coverage
+// are marked 'NONE' so they are not retried on the next run.
+// Processes the 100 highest-SRI bridges per run to keep costs predictable.
+router.get('/run-street-view', async (_req: Request, res: Response): Promise<void> => {
+  const apiKey = process.env['STREET_VIEW_API_KEY'];
+  if (!apiKey) {
+    res.status(500).json({ success: false, error: 'STREET_VIEW_API_KEY environment variable not set' });
+    return;
+  }
+
+  let processed = 0;
+  let found = 0;
+  let notFound = 0;
+  const errors: string[] = [];
+
+  try {
+    const bridgesRes = await pool.query<{
+      id: string;
+      name: string;
+      latitude: number;
+      longitude: number;
+    }>(
+      `SELECT id, name, latitude, longitude
+       FROM bridges
+       WHERE street_view_url IS NULL
+         AND latitude IS NOT NULL
+         AND longitude IS NOT NULL
+       ORDER BY sri_score DESC
+       LIMIT 100`,
+    );
+
+    console.log(`[street-view] processing ${bridgesRes.rows.length} bridges`);
+
+    for (const bridge of bridgesRes.rows) {
+      const { id, name, latitude: lat, longitude: lng } = bridge;
+
+      const metaUrl =
+        `https://maps.googleapis.com/maps/api/streetview/metadata` +
+        `?location=${lat},${lng}&key=${apiKey}`;
+
+      try {
+        const metaResp = await fetch(metaUrl, {
+          headers: { 'User-Agent': 'VicBIP/1.0' },
+          signal: AbortSignal.timeout(10_000),
+        });
+
+        const meta = (await metaResp.json()) as { status: string };
+
+        if (meta.status === 'OK') {
+          const imageUrl =
+            `https://maps.googleapis.com/maps/api/streetview` +
+            `?size=640x320&location=${lat},${lng}&fov=90&pitch=0&key=${apiKey}`;
+          await pool.query(
+            'UPDATE bridges SET street_view_url = $1 WHERE id = $2',
+            [imageUrl, id],
+          );
+          found++;
+          console.log(`[street-view] found: ${name}`);
+        } else {
+          await pool.query(
+            "UPDATE bridges SET street_view_url = 'NONE' WHERE id = $1",
+            [id],
+          );
+          notFound++;
+        }
+      } catch (err) {
+        errors.push(`${name}: ${String(err).slice(0, 80)}`);
+      }
+
+      processed++;
+
+      // 100 ms between requests to avoid rate-limiting
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    console.log(`[street-view] done: processed=${processed} found=${found} not_found=${notFound}`);
+    res.json({
+      success: true,
+      processed,
+      found,
+      not_found: notFound,
+      cost_estimate: '$' + (found * 0.007).toFixed(2),
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (err) {
+    console.error('[street-view] fatal error:', err);
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
 // POST /api/admin/add-tender — manual tender entry from the admin-direct form
 router.post('/add-tender', async (req: Request, res: Response): Promise<void> => {
   const body = req.body as {

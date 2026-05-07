@@ -301,6 +301,36 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
         </div>
       )}
 
+      {/* Street View Hero */}
+      {bridge.street_view_url && bridge.street_view_url !== 'NONE' ? (
+        <div className="relative">
+          <img
+            src={bridge.street_view_url}
+            alt={`Street view of ${bridge.name}`}
+            className="w-full h-48 object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+          <a
+            href={`https://www.google.com/maps?q=${bridge.latitude},${bridge.longitude}&layer=c`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute bottom-2 right-2 text-xs bg-black/60 text-white px-2 py-1 rounded hover:bg-black/80 transition-colors"
+          >
+            View on Google Maps ↗
+          </a>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center h-24 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 gap-1.5">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+          <span className="text-xs">No street imagery available</span>
+        </div>
+      )}
+
       {/* Section A — Identity */}
       <div className="p-4 border-b border-slate-200 dark:border-slate-700">
         <Section title="Identity">
@@ -593,20 +623,6 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
           {bridge.freyssinet_works && (
             <div className="mb-3 inline-flex items-center gap-1.5 bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-3 py-1 rounded-full text-xs font-medium">
               <span aria-hidden="true">✓</span> Freyssinet has worked on this bridge
-            </div>
-          )}
-
-          {bridge.street_view_url && (
-            <div className="mb-4">
-              <img
-                src={bridge.street_view_url}
-                alt={`Street view of ${bridge.name}`}
-                className="w-full rounded object-cover"
-                style={{ height: 200 }}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
             </div>
           )}
 
