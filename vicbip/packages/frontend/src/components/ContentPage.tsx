@@ -160,33 +160,58 @@ function ArticleCard({ article, draft, generating, onGenerate }: ArticleCardProp
           </div>
         )}
 
-{/* Option 2: Unsplash direct image */}
-<div className="mb-2">
-  <p className="text-[10px] text-slate-500 mb-1 font-medium">
-    {n + 1}. Ready-to-use photo — right-click → Save, then upload to LinkedIn
-  </p>
-  <img
-    src={`https://source.unsplash.com/640x360/?bridge,infrastructure,${
-      encodeURIComponent(
-        article.title.split(' ')
-          .filter((w: string) => w.length > 4)
-          .slice(0, 2)
-          .join(',')
-      )
-    }`}
-    alt="Bridge infrastructure"
-    className="w-full rounded object-cover cursor-pointer"
-    style={{ height: '110px' }}
-    onClick={(e) => window.open((e.target as HTMLImageElement).src, '_blank')}
-    onError={(e) => {
-      (e.target as HTMLImageElement).src =
-        'https://source.unsplash.com/640x360/?bridge,infrastructure';
-    }}
-  />
-  <p className="text-[10px] text-slate-400 italic mt-0.5">
-    Free to use · Credit: Unsplash photographer
-  </p>
-</div>
+        {/* Option 2: contextual Unsplash photo via images.unsplash.com (source.unsplash.com deprecated) */}
+        {(() => {
+          const title = article.title.toLowerCase();
+          const photoId =
+            title.includes('rail') || title.includes('train')
+              ? 'photo-1474487548417-781cb6d646b3'
+              : title.includes('bridge') || title.includes('tasmania')
+              ? 'photo-1558618666-fcd25c85cd64'
+              : title.includes('construction') || title.includes('market')
+              ? 'photo-1504307651254-35680f356dfd'
+              : title.includes('freight') || title.includes('road')
+              ? 'photo-1601584115197-04ecc0da31d7'
+              : title.includes('fund') || title.includes('budget')
+              ? 'photo-1486325212027-8081e485255e'
+              : 'photo-1588421357574-87938a86fa28';
+
+          const imgUrl =
+            `https://images.unsplash.com/${photoId}` +
+            `?w=640&h=360&fit=crop&auto=format`;
+
+          return (
+            <div className="mb-2">
+              <p className="text-[10px] text-slate-500 mb-1 font-medium">
+                {n + 1}. Ready-to-use photo — right-click → Save, then upload to LinkedIn
+              </p>
+              <img
+                src={imgUrl}
+                alt="Infrastructure photo"
+                className="w-full rounded object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                style={{ height: '110px' }}
+                onClick={() => window.open(imgUrl, '_blank')}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src =
+                    'https://images.unsplash.com/photo-1588421357574-87938a86fa28?w=640&h=360&fit=crop';
+                }}
+              />
+              <div className="flex items-center justify-between mt-0.5">
+                <p className="text-[10px] text-slate-400 italic">
+                  Free to use · Credit: Unsplash
+                </p>
+                <a
+                  href={imgUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-brand-blue hover:underline"
+                >
+                  ↓ Open full size
+                </a>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Option 3: Freyssinet project photo */}
         <div>
