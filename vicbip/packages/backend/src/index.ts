@@ -102,6 +102,7 @@ const endpoints = [
   ['Seed DTP Bridges','seed-dtp?force=true','#1B4F8C'],
   ['Seed Budget','seed-budget','#166534'],
   ['Seed Prequal','seed-prequal','#166534'],
+  ['Run Prequal Match','run-prequal-match','#166534'],
   ['Remap Owners','remap-owners','#1B4F8C'],
   ['Run Traffic AADT','run-traffic-aadt','#166534'],
   ['Run TIRTL','run-traffic-tirtl','#166534'],

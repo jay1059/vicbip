@@ -5,11 +5,94 @@ import { computeSolutionMatch } from '../utils/solutionMatch';
 import type {
   BridgeGeoJSONCollection,
   BridgeDetail,
+  BridgePrequal,
+  PrequalCompanySummary,
   BridgeStats,
   BridgeCrashSummary,
   OwnerCategory,
   RiskTier,
 } from '@vicbip/shared';
+
+/** Compute estimated project value in dollars based on SRI and span */
+function computeEstValue(sriScore: number, spanM: number): number {
+  if (sriScore >= 80) return spanM * 12000;
+  if (sriScore >= 60) return spanM * 6000;
+  if (sriScore >= 40) return spanM * 2000;
+  return 500000;
+}
+
+/** Format a dollar value as $XM or $XK */
+function fmtCurrency(v: number): string {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  return `$${Math.round(v / 1000)}K`;
+}
+
+/** Build the prequal intelligence object for a bridge detail response */
+async function getPrequal(
+  pool: import('pg').Pool,
+  sriScore: number,
+  spanMRaw: number | null,
+): Promise<BridgePrequal | null> {
+  const span = spanMRaw ?? 30;
+  const est = computeEstValue(sriScore, span);
+  const estLow = Math.round(est * 0.7);
+  const estHigh = Math.round(est * 1.6);
+
+  type CompanyRow = {
+    company_name: string;
+    bridge_level: string | null;
+    financial_level: string | null;
+    financial_value: number | null;
+    has_design: boolean;
+    company_type: string | null;
+  };
+
+  let rows: CompanyRow[];
+  try {
+    const result = await pool.query<CompanyRow>(
+      `SELECT company_name, bridge_level, financial_level, financial_value, has_design, company_type
+       FROM prequal_companies
+       WHERE (financial_value IS NULL OR financial_value * 1000000 >= $1)
+         AND (bridge_level IS NOT NULL OR has_design = true)
+       ORDER BY
+         CASE bridge_level WHEN 'B4' THEN 4 WHEN 'B3' THEN 3 WHEN 'B2' THEN 2 WHEN 'B1' THEN 1 ELSE 0 END DESC,
+         COALESCE(financial_value, 99999) DESC`,
+      [est],
+    );
+    rows = result.rows;
+  } catch {
+    // prequal tables may not exist yet (migration pending)
+    return null;
+  }
+
+  if (rows.length === 0) return null;
+
+  const contractors = rows.filter((r) => r.company_type === 'contractor' || r.company_type === 'both');
+  const consultants = rows.filter((r) => r.company_type === 'consultant' || r.company_type === 'both');
+  const nContractors = contractors.length;
+  const density: BridgePrequal['competitive_density'] =
+    nContractors < 5 ? 'low' : nContractors <= 15 ? 'medium' : 'high';
+
+  const companies: PrequalCompanySummary[] = rows.map((r) => ({
+    name: r.company_name,
+    bridge_level: r.bridge_level,
+    financial_level: r.financial_level,
+    type: r.company_type,
+  }));
+
+  const freyssinet_eligible = rows.some((r) =>
+    r.company_name.toLowerCase().includes('freyssinet'),
+  );
+
+  return {
+    est_value_range: `${fmtCurrency(estLow)} – ${fmtCurrency(estHigh)}`,
+    eligible_contractors: nContractors,
+    eligible_consultants: consultants.length,
+    competitive_density: density,
+    companies,
+    freyssinet_eligible,
+  };
+}
 
 const router = Router();
 
@@ -409,6 +492,13 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       tenders,
     });
 
+    const sriScore = bridge['sri_score'] as number;
+    const spanM = bridge['span_m'] as number | null;
+
+    const [prequal] = await Promise.all([
+      getPrequal(pool, sriScore, spanM),
+    ]);
+
     const detail: BridgeDetail = {
       id: bridge['id'] as string,
       bridge_id: bridge['bridge_id'] as string | null,
@@ -416,14 +506,14 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       road_name: bridge['road_name'] as string | null,
       bridge_type: bridge['bridge_type'] as string | null,
       construction_year: bridge['construction_year'] as number | null,
-      span_m: bridge['span_m'] as number | null,
+      span_m: spanM,
       feature_crossed: bridge['feature_crossed'] as string | null,
       owner_name: bridge['owner_name'] as string | null,
       owner_category: bridge['owner_category'] as OwnerCategory | null,
       latitude: bridge['latitude'] as number,
       longitude: bridge['longitude'] as number,
       design_load_std: bridge['design_load_std'] as string | null,
-      sri_score: bridge['sri_score'] as number,
+      sri_score: sriScore,
       risk_tier: bridge['risk_tier'] as RiskTier | null,
       freyssinet_works: bridge['freyssinet_works'] as boolean,
       street_view_url: bridge['street_view_url'] as string | null,
@@ -436,6 +526,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       tenders,
       intelligence: intelligenceRes.rows as BridgeDetail['intelligence'],
       solution_match,
+      prequal,
     };
 
     res.json(detail);

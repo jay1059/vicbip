@@ -129,6 +129,22 @@ export interface BridgeGeoJSONCollection {
   features: BridgeGeoJSONFeature[];
 }
 
+export interface PrequalCompanySummary {
+  name: string;
+  bridge_level: string | null;
+  financial_level: string | null;
+  type: string | null;
+}
+
+export interface BridgePrequal {
+  est_value_range: string;
+  eligible_contractors: number;
+  eligible_consultants: number;
+  competitive_density: 'low' | 'medium' | 'high';
+  companies: PrequalCompanySummary[];
+  freyssinet_eligible: boolean;
+}
+
 export interface BridgeDetail extends Bridge {
   traffic: BridgeTraffic | null;
   crash_summary: BridgeCrashSummary | null;
@@ -136,6 +152,7 @@ export interface BridgeDetail extends Bridge {
   tenders: BridgeTender[];
   intelligence: BridgeIntelligence[];
   solution_match: string[];
+  prequal: BridgePrequal | null;
 }
 
 export interface BridgeStats {

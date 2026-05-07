@@ -741,6 +741,103 @@ router.get('/run-all-data', async (_req: Request, res: Response): Promise<void> 
   res.status(allOk ? 200 : 500).json({ success: allOk, duration_ms: Date.now() - t0, results });
 });
 
+// GET /api/admin/seed-prequal
+// Inserts the DTP prequalification company register (contractors + consultants).
+// ON CONFLICT (company_name) DO NOTHING — safe to re-run.
+router.get('/seed-prequal', async (_req: Request, res: Response): Promise<void> => {
+  interface PrequalRow {
+    company_name: string;
+    bridge_level: string | null;
+    financial_level: string | null;
+    financial_value: number | null;
+    has_design: boolean;
+    company_type: string;
+  }
+
+  const companies: PrequalRow[] = [
+    // Contractors
+    { company_name: 'CPB Contractors',      bridge_level: 'B4', financial_level: 'UNLIMITED', financial_value: null,  has_design: false, company_type: 'contractor' },
+    { company_name: 'John Holland',          bridge_level: 'B4', financial_level: 'UNLIMITED', financial_value: null,  has_design: false, company_type: 'contractor' },
+    { company_name: 'Laing O\'Rourke',       bridge_level: 'B4', financial_level: 'UNLIMITED', financial_value: null,  has_design: false, company_type: 'contractor' },
+    { company_name: 'McConnell Dowell',      bridge_level: 'B3', financial_level: 'F75',       financial_value: 75,   has_design: false, company_type: 'contractor' },
+    { company_name: 'Downer Group',          bridge_level: 'B3', financial_level: 'F100',      financial_value: 100,  has_design: false, company_type: 'contractor' },
+    { company_name: 'Abergeldie',            bridge_level: 'B3', financial_level: 'F75',       financial_value: 75,   has_design: false, company_type: 'contractor' },
+    { company_name: 'Fulton Hogan',          bridge_level: 'B3', financial_level: 'F50',       financial_value: 50,   has_design: false, company_type: 'contractor' },
+    { company_name: 'Ventia',                bridge_level: 'B3', financial_level: 'F50',       financial_value: 50,   has_design: false, company_type: 'contractor' },
+    { company_name: 'BMD Constructions',     bridge_level: 'B2', financial_level: 'F25',       financial_value: 25,   has_design: false, company_type: 'contractor' },
+    { company_name: 'Georgiou Group',        bridge_level: 'B2', financial_level: 'F25',       financial_value: 25,   has_design: false, company_type: 'contractor' },
+    { company_name: 'Freyssinet Australia',  bridge_level: 'B3', financial_level: 'F25',       financial_value: 25,   has_design: false, company_type: 'both' },
+    // Consultants (design capability, no B/F levels from DTP contractor register)
+    { company_name: 'AECOM',   bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
+    { company_name: 'Aurecon', bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
+    { company_name: 'WSP',     bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
+    { company_name: 'Jacobs',  bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
+    { company_name: 'Arup',    bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
+    { company_name: 'GHD',     bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
+  ];
+
+  let inserted = 0;
+  let skipped = 0;
+
+  try {
+    for (const c of companies) {
+      const r = await pool.query(
+        `INSERT INTO prequal_companies
+           (company_name, bridge_level, financial_level, financial_value, has_design, company_type)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (company_name) DO NOTHING
+         RETURNING id`,
+        [c.company_name, c.bridge_level, c.financial_level, c.financial_value, c.has_design, c.company_type],
+      );
+      if ((r.rowCount ?? 0) > 0) inserted++; else skipped++;
+    }
+    console.log(`[seed-prequal] inserted=${inserted} skipped=${skipped}`);
+    res.json({ success: true, inserted, skipped, total: companies.length });
+  } catch (err) {
+    console.error('[seed-prequal] error:', err);
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
+// GET /api/admin/run-prequal-match
+// Batch-computes bridge ↔ company eligibility and populates bridge_prequal_matches.
+// Uses a single SQL CROSS JOIN for efficiency across all 3,615 bridges × 17 companies.
+// Eligibility: company financial capacity >= bridge estimated project value
+//              AND company has a bridge contractor level OR is a design consultant.
+// Est values: Critical (sri>=80) = span*12000, High = span*6000,
+//             Moderate = span*2000, Low = 500000 (span default 30m if null).
+router.get('/run-prequal-match', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await pool.query(`
+      INSERT INTO bridge_prequal_matches (bridge_id, company_id, match_type)
+      SELECT b.id, c.id, 'eligible'
+      FROM (
+        SELECT
+          id,
+          CASE
+            WHEN sri_score >= 80 THEN COALESCE(span_m, 30) * 12000
+            WHEN sri_score >= 60 THEN COALESCE(span_m, 30) * 6000
+            WHEN sri_score >= 40 THEN COALESCE(span_m, 30) * 2000
+            ELSE 500000
+          END AS est_value
+        FROM bridges
+      ) b
+      CROSS JOIN prequal_companies c
+      WHERE
+        (c.financial_value IS NULL OR c.financial_value * 1000000 >= b.est_value)
+        AND (c.bridge_level IS NOT NULL OR c.has_design = true)
+      ON CONFLICT (bridge_id, company_id) DO NOTHING
+    `);
+
+    const matched = result.rowCount ?? 0;
+    console.log(`[run-prequal-match] inserted ${matched} eligibility records`);
+    res.json({ success: true, matched });
+  } catch (err) {
+    console.error('[run-prequal-match] error:', err);
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
 // GET /api/admin/reset-street-view
 // Clears all stored street_view_url values so the next run-street-view
 // pass will re-check every bridge (useful after API key changes or

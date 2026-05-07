@@ -22,7 +22,9 @@ const ACTIONS: AdminAction[] = [
     color: 'red',
   },
   { id: 'disruptions',   label: 'Run Disruptions',                 url: '/api/admin/run-disruptions',      color: 'orange' },
-  { id: 'tender-scrape', label: 'Run Tender Scraper',              url: '/api/admin/run-tender-scrape',    color: 'purple' },
+  { id: 'seed-prequal',    label: 'Seed Prequal Companies',          url: '/api/admin/seed-prequal',          color: 'green' },
+  { id: 'prequal-match',  label: 'Run Prequal Match',               url: '/api/admin/run-prequal-match',     color: 'green' },
+  { id: 'tender-scrape',  label: 'Run Tender Scraper',              url: '/api/admin/run-tender-scrape',     color: 'purple' },
   {
     id: 'street-view',
     label: 'Run Street View (100 bridges)',

@@ -259,6 +259,54 @@ function SectionJCostMatrix({ bridge }: { bridge: BridgeDetail }): React.ReactEl
   );
 }
 
+function PrequalCompanyList({ companies }: { companies: import('@vicbip/shared').PrequalCompanySummary[] }): React.ReactElement {
+  const [expanded, setExpanded] = React.useState(false);
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="text-xs text-brand-blue dark:text-blue-400 hover:underline flex items-center gap-1"
+        aria-expanded={expanded}
+      >
+        {expanded ? '▲' : '▼'} {expanded ? 'Hide' : `View all ${companies.length} eligible companies`}
+      </button>
+      {expanded && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-700">
+                <th className="text-left py-1 pr-3 text-slate-500 font-medium">Company</th>
+                <th className="text-left py-1 pr-3 text-slate-500 font-medium">B-Level</th>
+                <th className="text-left py-1 pr-3 text-slate-500 font-medium">F-Level</th>
+                <th className="text-left py-1 text-slate-500 font-medium">Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {companies.map((c, i) => (
+                <tr
+                  key={i}
+                  className={`border-b border-slate-100 dark:border-slate-800 ${
+                    c.name.toLowerCase().includes('freyssinet')
+                      ? 'bg-blue-50/60 dark:bg-blue-900/10'
+                      : ''
+                  }`}
+                >
+                  <td className={`py-1 pr-3 font-medium ${c.name.toLowerCase().includes('freyssinet') ? 'text-brand-blue dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                    {c.name}
+                  </td>
+                  <td className="py-1 pr-3 text-slate-600 dark:text-slate-400">{c.bridge_level ?? '—'}</td>
+                  <td className="py-1 pr-3 text-slate-600 dark:text-slate-400">{c.financial_level ?? '—'}</td>
+                  <td className="py-1 text-slate-500 dark:text-slate-500 capitalize">{c.type ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactElement {
   const [scoreExpanded, setScoreExpanded] = useState(false);
 
@@ -807,6 +855,88 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
           )}
         </Section>
       </div>
+
+      {/* Section H — Competitive Intelligence (Critical/High only) */}
+      {(() => {
+        const tier = bridge.risk_tier?.toLowerCase();
+        const sri = bridge.sri_score ?? 0;
+        if (tier !== 'critical' && tier !== 'high' && sri < 60) return null;
+        const pq = bridge.prequal;
+
+        return (
+          <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+            <Section title="Competitive Intelligence">
+              {pq ? (
+                <div className="space-y-3">
+                  {/* Est value + contractor count row */}
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Estimated project value</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {pq.est_value_range}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {/* Competitive density badge */}
+                      {(() => {
+                        const densityConfig = {
+                          low:    { label: 'Low competition',    cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' },
+                          medium: { label: 'Medium competition', cls: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' },
+                          high:   { label: 'High competition',   cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' },
+                        };
+                        const cfg = densityConfig[pq.competitive_density];
+                        return (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${cfg.cls}`}>
+                            {cfg.label}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Eligible counts */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                      <p className="text-slate-500 dark:text-slate-400">Eligible contractors</p>
+                      <p className="text-base font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                        {pq.eligible_contractors}
+                      </p>
+                    </div>
+                    <div className="p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                      <p className="text-slate-500 dark:text-slate-400">Eligible consultants</p>
+                      <p className="text-base font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                        {pq.eligible_consultants}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Freyssinet eligible badge */}
+                  {pq.freyssinet_eligible && (
+                    <div className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 border border-brand-blue/20 text-brand-blue dark:text-blue-300 px-3 py-1 rounded-full text-xs font-semibold">
+                      <span aria-hidden="true">✓</span> Freyssinet Eligible B3/F25
+                    </div>
+                  )}
+
+                  {/* Expandable company list */}
+                  <PrequalCompanyList companies={pq.companies} />
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+                  No prequalification data. Run{' '}
+                  <span className="font-medium text-slate-600 dark:text-slate-300">
+                    Seed Prequal
+                  </span>{' '}
+                  then{' '}
+                  <span className="font-medium text-slate-600 dark:text-slate-300">
+                    Run Prequal Match
+                  </span>{' '}
+                  in admin.
+                </p>
+              )}
+            </Section>
+          </div>
+        );
+      })()}
 
       {/* Section J — Asset Owner Decision Framework */}
       {(() => {
