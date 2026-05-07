@@ -741,4 +741,82 @@ router.get('/run-all-data', async (_req: Request, res: Response): Promise<void> 
   res.status(allOk ? 200 : 500).json({ success: allOk, duration_ms: Date.now() - t0, results });
 });
 
+// POST /api/admin/add-tender — manual tender entry from the admin-direct form
+router.post('/add-tender', async (req: Request, res: Response): Promise<void> => {
+  const body = req.body as {
+    title?: unknown;
+    url?: unknown;
+    published_date?: unknown;
+    agency?: unknown;
+    status?: unknown;
+    value_aud?: unknown;
+    bridge_name?: unknown;
+    notes?: unknown;
+  };
+
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+  const url = typeof body.url === 'string' ? body.url.trim() : '';
+
+  if (!title || !url) {
+    res.status(400).json({ success: false, error: 'title and url are required' });
+    return;
+  }
+
+  const publishedDate = typeof body.published_date === 'string' && body.published_date ? body.published_date : null;
+  const agency = typeof body.agency === 'string' && body.agency ? body.agency : null;
+  const status = typeof body.status === 'string' && body.status ? body.status : 'open';
+  const valueAud = typeof body.value_aud === 'number' ? body.value_aud : null;
+  const notes = typeof body.notes === 'string' && body.notes ? body.notes : null;
+  const bridgeName = typeof body.bridge_name === 'string' && body.bridge_name ? body.bridge_name.trim() : null;
+
+  // Fuzzy-match bridge name via ILIKE
+  let bridgeMatched: { id: string; name: string } | null = null;
+  if (bridgeName) {
+    try {
+      const matchRes = await pool.query<{ id: string; name: string }>(
+        `SELECT id, name FROM bridges
+         WHERE LOWER(name) LIKE '%' || LOWER($1) || '%'
+         ORDER BY LENGTH(name) ASC
+         LIMIT 5`,
+        [bridgeName],
+      );
+      if (matchRes.rows.length > 0) {
+        bridgeMatched = matchRes.rows[0] ?? null;
+      }
+    } catch (err) {
+      console.warn('[admin] add-tender: bridge fuzzy-match failed:', err);
+    }
+  }
+
+  try {
+    const insertRes = await pool.query<{ id: string }>(
+      `INSERT INTO bridge_tenders
+         (bridge_id, title, published_date, agency, status, value_aud, source, url, summary)
+       VALUES ($1, $2, $3, $4, $5, $6, 'manual', $7, $8)
+       ON CONFLICT (url) DO UPDATE SET
+         title       = EXCLUDED.title,
+         bridge_id   = COALESCE(EXCLUDED.bridge_id, bridge_tenders.bridge_id),
+         published_date = EXCLUDED.published_date,
+         agency      = EXCLUDED.agency,
+         status      = EXCLUDED.status,
+         value_aud   = EXCLUDED.value_aud,
+         summary     = EXCLUDED.summary
+       RETURNING id`,
+      [bridgeMatched?.id ?? null, title, publishedDate, agency, status, valueAud, url, notes],
+    );
+
+    const tenderId = (insertRes.rows[0] as { id: string } | undefined)?.id ?? null;
+    console.log(`[admin] add-tender: inserted/updated id=${tenderId} bridge=${bridgeMatched?.name ?? 'none'}`);
+
+    res.json({
+      success: true,
+      tender_id: tenderId,
+      bridge_matched: bridgeMatched ?? null,
+    });
+  } catch (err) {
+    console.error('[admin] add-tender failed:', err);
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
 export default router;

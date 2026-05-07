@@ -87,6 +87,8 @@ export interface BridgeTender {
   source: string | null;
   url: string | null;
   summary: string | null;
+  agency: string | null;
+  status: string | null;
 }
 
 export interface BridgeIntelligence {

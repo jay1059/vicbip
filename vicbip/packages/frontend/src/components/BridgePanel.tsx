@@ -612,39 +612,81 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
 
           {bridge.tenders.length > 0 ? (
             <div className="mb-4">
-              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
-                TENDERS ({bridge.tenders.length})
+              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
+                Tender Activity ({bridge.tenders.length})
               </h4>
               <div className="space-y-3">
-                {bridge.tenders.map((tender) => (
-                  <div key={tender.id} className="text-sm">
-                    <p className="font-medium text-slate-800 dark:text-slate-200">
-                      {tender.title}
-                    </p>
-                    <div className="text-xs text-slate-500 space-y-0.5 mt-0.5">
-                      {tender.published_date && (
-                        <p>{new Date(tender.published_date).toLocaleDateString('en-AU')}</p>
-                      )}
-                      {tender.contractor && <p>Contractor: {tender.contractor}</p>}
-                      {tender.value_aud && (
-                        <p>Value: ${tender.value_aud.toLocaleString()}</p>
-                      )}
+                {bridge.tenders.map((tender) => {
+                  const statusLower = (tender.status ?? '').toLowerCase();
+                  const statusBadge =
+                    statusLower === 'open'
+                      ? { label: 'Open', cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' }
+                      : statusLower === 'closed'
+                      ? { label: 'Closed', cls: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' }
+                      : statusLower === 'awarded'
+                      ? { label: 'Awarded', cls: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300' }
+                      : null;
+
+                  return (
+                    <div
+                      key={tender.id}
+                      className="p-2.5 rounded border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        {tender.url ? (
+                          <a
+                            href={tender.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-brand-blue dark:text-blue-300 hover:underline leading-snug"
+                          >
+                            {tender.title}
+                          </a>
+                        ) : (
+                          <p className="text-sm font-medium text-slate-800 dark:text-slate-200 leading-snug">
+                            {tender.title}
+                          </p>
+                        )}
+                        {statusBadge && (
+                          <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${statusBadge.cls}`}>
+                            {statusBadge.label}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500 space-y-0.5">
+                        {tender.agency && (
+                          <p className="text-slate-600 dark:text-slate-400">{tender.agency}</p>
+                        )}
+                        {tender.published_date && (
+                          <p>{new Date(tender.published_date).toLocaleDateString('en-AU')}</p>
+                        )}
+                        {tender.contractor && <p>Contractor: {tender.contractor}</p>}
+                        {tender.value_aud != null && (
+                          <p className="font-medium text-slate-700 dark:text-slate-300">
+                            Est. value: ${tender.value_aud.toLocaleString()}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    {tender.url && (
-                      <a
-                        href={tender.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-brand-blue hover:underline"
-                      >
-                        View source ↗
-                      </a>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="mb-4 p-2.5 rounded border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40">
+              <p className="text-xs text-slate-500 dark:text-slate-400 italic">
+                No tender activity recorded. Check{' '}
+                <a
+                  href="https://www.tenders.vic.gov.au"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-blue hover:underline"
+                >
+                  tenders.vic.gov.au
+                </a>
+              </p>
+            </div>
+          )}
 
           {bridge.intelligence.length > 0 ? (
             <div className="space-y-3">
@@ -684,7 +726,7 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
               ))}
             </div>
           ) : (
-            bridge.tenders.length === 0 && (
+            bridge.tenders.length > 0 && (
               <p className="text-sm text-slate-500 dark:text-slate-400 italic">
                 No intelligence records yet. Consider running a manual search.
               </p>
@@ -778,7 +820,7 @@ export function BridgePanel(): React.ReactElement {
 
   return (
     <aside
-      className={`fixed top-14 right-0 bottom-8 w-[420px] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 z-20 flex flex-col shadow-2xl transition-transform duration-300 ${
+      className={`fixed top-14 right-0 bottom-8 w-[480px] min-w-[480px] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 z-20 flex flex-col shadow-2xl transition-transform duration-300 ${
         isOpen ? 'translate-x-0' : 'translate-x-full'
       }`}
       aria-label="Bridge detail panel"

@@ -18,11 +18,81 @@ const PORT = process.env['PORT'] ?? 3001;
 // by static-file middleware or the catch-all. Registered as the VERY FIRST
 // route so Express never reaches express.static() or the catch-all for this path.
 const adminHtml = `<!DOCTYPE html>
-<html><head><title>VicBIP Admin</title></head>
-<body style="font-family:sans-serif;padding:20px;background:#0f172a;color:white">
-<h2 style="color:#E8731A">VicBIP Admin Panel</h2>
-<p style="color:#94a3b8;font-size:13px">Server-rendered — no React bundle required. <a href="/" style="color:#60a5fa">&#8592; Back to app</a></p>
+<html>
+<head>
+  <title>VicBIP Admin</title>
+  <meta charset="utf-8">
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:sans-serif;padding:20px;background:#0f172a;color:white;margin:0}
+    h2{color:#E8731A;margin:0 0 4px}
+    h3{color:#93c5fd;margin:20px 0 8px;font-size:14px;text-transform:uppercase;letter-spacing:.05em}
+    p.sub{color:#94a3b8;font-size:13px;margin:0 0 16px}
+    .row{margin:10px 0;display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
+    button{padding:9px 18px;background:#1B4F8C;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px}
+    button:hover{opacity:.9} button:disabled{opacity:.5}
+    pre{color:#94a3b8;font-size:11px;font-family:monospace;max-width:680px;word-break:break-all;white-space:pre-wrap;margin:0;background:#1e293b;padding:8px;border-radius:4px}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:680px}
+    .form-grid .full{grid-column:1/-1}
+    label{display:block;font-size:12px;color:#94a3b8;margin-bottom:3px}
+    input,select,textarea{width:100%;padding:7px 10px;background:#1e293b;color:white;border:1px solid #334155;border-radius:4px;font-size:13px}
+    textarea{resize:vertical;min-height:60px}
+    .submit-btn{background:#5B21B6;margin-top:4px;padding:10px 24px;font-size:14px}
+    #tender-result{margin-top:10px}
+  </style>
+</head>
+<body>
+<h2>VicBIP Admin Panel</h2>
+<p class="sub">Server-rendered — no React bundle required. <a href="/" style="color:#60a5fa">&#8592; Back to app</a></p>
+
+<h3>Pipeline Actions</h3>
 <div id="actions"></div>
+
+<h3>Manual Tender Entry</h3>
+<p class="sub">Add a tender record manually and optionally link it to a bridge.</p>
+<form id="tender-form" onsubmit="submitTender(event)">
+  <div class="form-grid">
+    <div class="full">
+      <label>Tender Title *</label>
+      <input type="text" name="title" required placeholder="e.g. Princes Bridge Strengthening Works">
+    </div>
+    <div class="full">
+      <label>Tender URL *</label>
+      <input type="url" name="url" required placeholder="https://...">
+    </div>
+    <div>
+      <label>Published Date</label>
+      <input type="date" name="published_date">
+    </div>
+    <div>
+      <label>Status</label>
+      <select name="status">
+        <option value="open">Open</option>
+        <option value="closed">Closed</option>
+        <option value="awarded">Awarded</option>
+      </select>
+    </div>
+    <div>
+      <label>Agency / Council</label>
+      <input type="text" name="agency" placeholder="e.g. City of Melbourne">
+    </div>
+    <div>
+      <label>Estimated Value (AUD)</label>
+      <input type="text" name="value_aud" placeholder="e.g. 2500000 or $2.5M">
+    </div>
+    <div class="full">
+      <label>Bridge Name Match (leave blank to skip auto-link)</label>
+      <input type="text" name="bridge_name" placeholder="e.g. Princes Bridge — partial match works">
+    </div>
+    <div class="full">
+      <label>Notes / Summary</label>
+      <textarea name="notes" placeholder="Optional description or context"></textarea>
+    </div>
+  </div>
+  <button type="submit" class="submit-btn">Add Tender</button>
+</form>
+<div id="tender-result"></div>
+
 <script>
 const endpoints = [
   ['Seed DTP Bridges','seed-dtp?force=true','#1B4F8C'],
@@ -37,14 +107,15 @@ const endpoints = [
 const div = document.getElementById('actions');
 endpoints.forEach(([label,ep,color]) => {
   const row = document.createElement('div');
-  row.style.cssText='margin:12px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap';
+  row.style.cssText='margin:10px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap';
   const btn = document.createElement('button');
   btn.textContent = label;
-  btn.style.cssText='padding:10px 20px;background:'+color+';color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px';
+  btn.style.cssText='padding:9px 18px;background:'+color+';color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px';
   const status = document.createElement('pre');
-  status.style.cssText='color:#94a3b8;font-size:12px;font-family:monospace;max-width:700px;word-break:break-all;white-space:pre-wrap;margin:0';
+  status.style.cssText='color:#94a3b8;font-size:11px;font-family:monospace;max-width:680px;word-break:break-all;white-space:pre-wrap;margin:0;background:#1e293b;padding:8px;border-radius:4px;display:none';
   btn.onclick = async () => {
     btn.disabled=true;
+    status.style.display='block';
     status.textContent='Running...';
     const t=Date.now();
     try {
@@ -62,7 +133,48 @@ endpoints.forEach(([label,ep,color]) => {
   row.appendChild(status);
   div.appendChild(row);
 });
-</script></body></html>`;
+
+function parseValue(raw) {
+  if (!raw) return null;
+  const n = raw.replace(/[$,\\s]/g,'');
+  const m = n.match(/[\\d.]+/);
+  if (!m) return null;
+  let v = parseFloat(m[0]);
+  if (/million|\\dm/i.test(n)) v *= 1e6;
+  else if (/thousand|\\dk/i.test(n)) v *= 1e3;
+  return isNaN(v) ? null : Math.round(v);
+}
+
+async function submitTender(e) {
+  e.preventDefault();
+  const form = e.target;
+  const result = document.getElementById('tender-result');
+  result.innerHTML = '<pre>Submitting...</pre>';
+  const data = {
+    title: form.title.value.trim(),
+    url: form.url.value.trim(),
+    published_date: form.published_date.value || null,
+    status: form.status.value,
+    agency: form.agency.value.trim() || null,
+    value_aud: parseValue(form.value_aud.value),
+    bridge_name: form.bridge_name.value.trim() || null,
+    notes: form.notes.value.trim() || null,
+  };
+  try {
+    const r = await fetch('/api/admin/add-tender', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    const d = await r.json();
+    result.innerHTML = '<pre style="color:'+(d.success?'#86efac':'#fca5a5')+'">'+JSON.stringify(d,null,2)+'</pre>';
+    if (d.success) form.reset();
+  } catch(err) {
+    result.innerHTML = '<pre style="color:#fca5a5">Error: '+err+'</pre>';
+  }
+}
+</script>
+</body></html>`;
 
 // /admin-direct must be registered before ALL other middleware including express.static
 app.get('/admin-direct', (_req, res) => {

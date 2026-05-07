@@ -118,6 +118,8 @@ describe('computeSolutionMatch', () => {
         source: null,
         url: null,
         summary: null,
+        agency: null,
+        status: null,
       },
     ];
     const result = computeSolutionMatch({
