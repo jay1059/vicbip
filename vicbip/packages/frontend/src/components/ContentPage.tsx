@@ -160,21 +160,33 @@ function ArticleCard({ article, draft, generating, onGenerate }: ArticleCardProp
           </div>
         )}
 
-        {/* Option 2: Unsplash */}
-        <div className="mb-2">
-          <p className="text-[10px] text-slate-500 mb-0.5">
-            {n + 1}. Bridge photo — Unsplash (free to use)
-          </p>
-          <a
-            href="https://unsplash.com/s/photos/bridge-infrastructure"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] text-brand-blue hover:underline"
-          >
-            Browse on Unsplash ↗
-          </a>
-          <span className="text-[10px] text-slate-400 italic"> · Credit photographer</span>
-        </div>
+{/* Option 2: Unsplash direct image */}
+<div className="mb-2">
+  <p className="text-[10px] text-slate-500 mb-1 font-medium">
+    {n + 1}. Ready-to-use photo — right-click → Save, then upload to LinkedIn
+  </p>
+  <img
+    src={`https://source.unsplash.com/640x360/?bridge,infrastructure,${
+      encodeURIComponent(
+        article.title.split(' ')
+          .filter((w: string) => w.length > 4)
+          .slice(0, 2)
+          .join(',')
+      )
+    }`}
+    alt="Bridge infrastructure"
+    className="w-full rounded object-cover cursor-pointer"
+    style={{ height: '110px' }}
+    onClick={(e) => window.open((e.target as HTMLImageElement).src, '_blank')}
+    onError={(e) => {
+      (e.target as HTMLImageElement).src =
+        'https://source.unsplash.com/640x360/?bridge,infrastructure';
+    }}
+  />
+  <p className="text-[10px] text-slate-400 italic mt-0.5">
+    Free to use · Credit: Unsplash photographer
+  </p>
+</div>
 
         {/* Option 3: Freyssinet project photo */}
         <div>
