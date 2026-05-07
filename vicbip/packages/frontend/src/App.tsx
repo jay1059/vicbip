@@ -6,6 +6,7 @@ import { DashboardView } from './components/DashboardView';
 import { AdminPanel } from './components/AdminPanel';
 import { BridgePanel } from './components/BridgePanel';
 import { Disclaimer } from './components/Disclaimer';
+import { ContentFeed } from './components/ContentFeed';
 import { useAppStore } from './store/useAppStore';
 
 function App(): React.ReactElement {
@@ -48,6 +49,7 @@ function App(): React.ReactElement {
 
       <BridgePanel />
       <Disclaimer />
+      <ContentFeed />
     </div>
   );
 }

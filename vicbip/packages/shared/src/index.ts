@@ -195,6 +195,14 @@ export interface BridgeStats {
   }>;
 }
 
+export interface NewsArticle {
+  title: string;
+  url: string;
+  snippet: string;
+  source: string;
+  published: string;
+}
+
 export interface BridgeFilters {
   owner_category?: OwnerCategory[];
   risk_tier?: RiskTier[];
