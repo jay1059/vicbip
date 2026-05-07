@@ -301,29 +301,35 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
         </div>
       )}
 
-      {/* Street View Hero — only rendered when a valid image URL is stored */}
-      {bridge.street_view_url &&
-        bridge.street_view_url !== 'NONE' &&
-        bridge.street_view_url.startsWith('http') && (
-        <div className="relative">
-          <img
-            src={bridge.street_view_url}
-            alt={`Street view of ${bridge.name}`}
-            className="w-full h-48 object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-          <a
-            href={`https://www.google.com/maps?q=${bridge.latitude},${bridge.longitude}&layer=c`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="absolute bottom-2 right-2 text-xs bg-black/60 text-white px-2 py-1 rounded hover:bg-black/80 transition-colors"
-          >
-            View on Google Maps ↗
-          </a>
-        </div>
-      )}
+      {/* Mapbox satellite thumbnail — shown for every bridge with coordinates */}
+      {(() => {
+        const mbToken = import.meta.env['VITE_MAPBOX_TOKEN'] as string | undefined;
+        if (!mbToken || bridge.latitude == null || bridge.longitude == null) return null;
+        const mapThumb =
+          `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/` +
+          `pin-s+E8731A(${bridge.longitude},${bridge.latitude})/` +
+          `${bridge.longitude},${bridge.latitude},15,0/` +
+          `640x200@2x?access_token=${mbToken}`;
+        return (
+          <div className="relative">
+            <img
+              src={mapThumb}
+              alt={`Map location of ${bridge.name}`}
+              className="w-full object-cover"
+              style={{ height: '160px' }}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+            <a
+              href={`https://www.google.com/maps?q=${bridge.latitude},${bridge.longitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute bottom-2 right-2 text-xs bg-black/50 text-white px-2 py-1 rounded hover:bg-black/70 transition-colors"
+            >
+              Open in Google Maps ↗
+            </a>
+          </div>
+        );
+      })()}
 
       {/* Section A — Identity */}
       <div className="p-4 border-b border-slate-200 dark:border-slate-700">
