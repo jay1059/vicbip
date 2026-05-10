@@ -741,421 +741,215 @@ router.get('/run-all-data', async (_req: Request, res: Response): Promise<void> 
   res.status(allOk ? 200 : 500).json({ success: allOk, duration_ms: Date.now() - t0, results });
 });
 
-// GET /api/admin/seed-budget
-// Idempotent: wipes existing allocations and has_budget_allocation flags first,
-// then re-inserts with improved per-structure fuzzy matching.
-router.get('/seed-budget', async (_req: Request, res: Response): Promise<void> => {
-  type MatchedBridge = { name: string; id: string; program: string };
-  const matchedBridges: MatchedBridge[] = [];
-  const unmatched: string[] = [];
+// ─── Future Projects ──────────────────────────────────────────────────────────
 
-  try {
-    // ── Reset ────────────────────────────────────────────────────────────────
-    await pool.query('DELETE FROM budget_allocations');
-    await pool.query('UPDATE bridges SET has_budget_allocation = false WHERE has_budget_allocation = true');
-    console.log('[seed-budget] reset complete');
+function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const a =
+    Math.sin(toRad((lat2 - lat1) / 2)) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(toRad((lon2 - lon1) / 2)) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
-    // ── Per-structure match queries ──────────────────────────────────────────
+function distPointToSegment(
+  bLat: number, bLon: number,
+  p1Lat: number, p1Lon: number,
+  p2Lat: number, p2Lon: number,
+): number {
+  const dx = p2Lon - p1Lon;
+  const dy = p2Lat - p1Lat;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return haversineM(bLat, bLon, p1Lat, p1Lon);
+  const t = Math.max(0, Math.min(1, ((bLon - p1Lon) * dx + (bLat - p1Lat) * dy) / lenSq));
+  return haversineM(bLat, bLon, p1Lat + t * dy, p1Lon + t * dx);
+}
 
-    // 1. West Gate Bridge — cable-stayed, span > 200m to avoid rail underpasses
-    const wgRes = await pool.query<{ id: string; name: string }>(
-      `SELECT id, name FROM bridges
-       WHERE (LOWER(name) LIKE '%west gate%' OR LOWER(name) LIKE '%westgate%')
-         AND COALESCE(span_m, 0) > 200
-       ORDER BY span_m DESC
-       LIMIT 1`,
-    );
-    const westGateId: string | null = wgRes.rows[0]?.id ?? null;
-    if (westGateId) {
-      matchedBridges.push({ name: wgRes.rows[0]!.name, id: westGateId, program: 'Metropolitan Road Network' });
-    } else {
-      unmatched.push('West Gate Bridge');
-    }
-
-    // 2. San Remo Bridge — crosses to Phillip Island
-    const srRes = await pool.query<{ id: string; name: string }>(
-      `SELECT id, name FROM bridges
-       WHERE LOWER(name) LIKE '%san remo%'
-          OR LOWER(name) LIKE '%phillip island%'
-          OR LOWER(COALESCE(road_name,'')) LIKE '%san remo%'
-          OR LOWER(COALESCE(road_name,'')) LIKE '%phillip island%'
-       ORDER BY sri_score DESC
-       LIMIT 3`,
-    );
-    // Use best match (highest SRI)
-    const sanRemoId: string | null = srRes.rows[0]?.id ?? null;
-    if (sanRemoId) {
-      matchedBridges.push({ name: srRes.rows[0]!.name, id: sanRemoId, program: 'Better Roads Blitz' });
-    } else {
-      unmatched.push('San Remo Bridge');
-    }
-    // Log all candidates for diagnostics
-    if (srRes.rows.length > 0) {
-      console.log('[seed-budget] San Remo candidates:', srRes.rows.map((r) => r.name).join(', '));
-    }
-
-    // 3. Mt Emu Creek Bridge
-    const mecRes = await pool.query<{ id: string; name: string }>(
-      `SELECT id, name FROM bridges
-       WHERE LOWER(name) LIKE '%emu creek%'
-          OR LOWER(name) LIKE '%mt emu%'
-          OR LOWER(COALESCE(feature_crossed,'')) LIKE '%emu creek%'
-       ORDER BY sri_score DESC
-       LIMIT 1`,
-    );
-    const emuCreekId: string | null = mecRes.rows[0]?.id ?? null;
-    if (emuCreekId) {
-      matchedBridges.push({ name: mecRes.rows[0]!.name, id: emuCreekId, program: 'Better Roads Blitz' });
-    } else {
-      unmatched.push('Mt Emu Creek Bridge');
-    }
-
-    // ── Build a map: structure_named → bridge_id ─────────────────────────────
-    const bridgeIdMap: Record<string, string | null> = {
-      'West Gate Bridge':    westGateId,
-      'San Remo Bridge':     sanRemoId,
-      'Mt Emu Creek Bridge': emuCreekId,
-    };
-
-    // ── Insert allocations ────────────────────────────────────────────────────
-    type AllocationDef = {
-      program_name: string; funding_tier: string; funding_body: string;
-      amount_aud: number | null; financial_year: string; structure_named: string;
-      status: string; source_url: string;
-    };
-    const allocations: AllocationDef[] = [
-      {
-        program_name: 'Better Roads Blitz', funding_tier: 'state', funding_body: 'DTP Victoria',
-        amount_aud: null, financial_year: '2025-26', structure_named: 'San Remo Bridge',
-        status: 'confirmed', source_url: 'https://www.budget.vic.gov.au/strong-regional-victoria',
-      },
-      {
-        program_name: 'Better Roads Blitz', funding_tier: 'state', funding_body: 'DTP Victoria',
-        amount_aud: null, financial_year: '2025-26', structure_named: 'Mt Emu Creek Bridge',
-        status: 'confirmed', source_url: 'https://www.budget.vic.gov.au/strong-regional-victoria',
-      },
-      {
-        program_name: 'Metropolitan Road Network', funding_tier: 'state', funding_body: 'DTP Victoria',
-        amount_aud: 38_000_000, financial_year: '2025-26', structure_named: 'West Gate Bridge',
-        status: 'confirmed', source_url: 'https://www.budget.vic.gov.au/transport-network',
-      },
-    ];
-
-    let inserted = 0;
-    for (const alloc of allocations) {
-      const bridgeId = bridgeIdMap[alloc.structure_named] ?? null;
-      await pool.query(
-        `INSERT INTO budget_allocations
-           (bridge_id, program_name, funding_tier, funding_body, amount_aud,
-            financial_year, structure_named, status, source_url)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [bridgeId, alloc.program_name, alloc.funding_tier, alloc.funding_body,
-         alloc.amount_aud, alloc.financial_year, alloc.structure_named,
-         alloc.status, alloc.source_url],
-      );
-      inserted++;
-    }
-
-    // ── Flag matched bridges ──────────────────────────────────────────────────
-    const matchedIds = matchedBridges.map((b) => b.id);
-    if (matchedIds.length > 0) {
-      await pool.query(
-        `UPDATE bridges SET has_budget_allocation = true WHERE id = ANY($1::uuid[])`,
-        [matchedIds],
-      );
-    }
-
-    console.log(`[seed-budget] inserted=${inserted} matched=${matchedBridges.length} unmatched=${unmatched.length}`);
-    res.json({ success: true, inserted, matched_bridges: matchedBridges, unmatched });
-  } catch (err) {
-    console.error('[seed-budget] error:', err);
-    res.status(500).json({ success: false, error: String(err) });
+function distToCorridor(bLat: number, bLon: number, waypoints: [number, number][]): number {
+  let minDist = Infinity;
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const [lat1, lon1] = waypoints[i]!;
+    const [lat2, lon2] = waypoints[i + 1]!;
+    const d = distPointToSegment(bLat, bLon, lat1, lon1, lat2, lon2);
+    if (d < minDist) minDist = d;
   }
-});
+  return minDist;
+}
 
-// GET /api/admin/seed-prequal
-// Inserts the DTP prequalification company register (contractors + consultants).
-// ON CONFLICT (company_name) DO NOTHING — safe to re-run.
-router.get('/seed-prequal', async (_req: Request, res: Response): Promise<void> => {
-  interface PrequalRow {
-    company_name: string;
-    bridge_level: string | null;
-    financial_level: string | null;
-    financial_value: number | null;
-    has_design: boolean;
-    company_type: string;
-  }
+type FutureProjectDef = {
+  project_name: string; project_code: string; category: string; status: string;
+  freyssinet_opportunity: string; budget_aud: number; completion_year: number;
+  source_url: string; corridor: [number, number][];
+};
 
-  const companies: PrequalRow[] = [
-    // Contractors
-    { company_name: 'CPB Contractors',      bridge_level: 'B4', financial_level: 'UNLIMITED', financial_value: null,  has_design: false, company_type: 'contractor' },
-    { company_name: 'John Holland',          bridge_level: 'B4', financial_level: 'UNLIMITED', financial_value: null,  has_design: false, company_type: 'contractor' },
-    { company_name: 'Laing O\'Rourke',       bridge_level: 'B4', financial_level: 'UNLIMITED', financial_value: null,  has_design: false, company_type: 'contractor' },
-    { company_name: 'McConnell Dowell',      bridge_level: 'B3', financial_level: 'F75',       financial_value: 75,   has_design: false, company_type: 'contractor' },
-    { company_name: 'Downer Group',          bridge_level: 'B3', financial_level: 'F100',      financial_value: 100,  has_design: false, company_type: 'contractor' },
-    { company_name: 'Abergeldie',            bridge_level: 'B3', financial_level: 'F75',       financial_value: 75,   has_design: false, company_type: 'contractor' },
-    { company_name: 'Fulton Hogan',          bridge_level: 'B3', financial_level: 'F50',       financial_value: 50,   has_design: false, company_type: 'contractor' },
-    { company_name: 'Ventia',                bridge_level: 'B3', financial_level: 'F50',       financial_value: 50,   has_design: false, company_type: 'contractor' },
-    { company_name: 'BMD Constructions',     bridge_level: 'B2', financial_level: 'F25',       financial_value: 25,   has_design: false, company_type: 'contractor' },
-    { company_name: 'Georgiou Group',        bridge_level: 'B2', financial_level: 'F25',       financial_value: 25,   has_design: false, company_type: 'contractor' },
-    { company_name: 'Freyssinet Australia',  bridge_level: 'B3', financial_level: 'F25',       financial_value: 25,   has_design: false, company_type: 'both' },
-    // Consultants (design capability, no B/F levels from DTP contractor register)
-    { company_name: 'AECOM',   bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
-    { company_name: 'Aurecon', bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
-    { company_name: 'WSP',     bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
-    { company_name: 'Jacobs',  bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
-    { company_name: 'Arup',    bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
-    { company_name: 'GHD',     bridge_level: null, financial_level: null, financial_value: null, has_design: true, company_type: 'consultant' },
-  ];
+const FUTURE_PROJECTS: FutureProjectDef[] = [
+  {
+    project_name: 'Inland Rail — Beveridge to Parkes', project_code: 'INLAND_RAIL',
+    category: 'rail', status: 'under_construction',
+    freyssinet_opportunity:
+      'Bridge raising and replacement for double-stack clearance. Active works at Euroa, Broadford, Wandong, Seymour, Tallarook, Wangaratta. Anderson Street bridge Euroa — replacement. Rail track lowering under Hamilton Street bridge and Hume Freeway Seymour. Murray Valley Highway bridge Barnawartha North — completed. Bridges at Wandong and Broadford — replacement underway.',
+    budget_aud: 9_800_000_000, completion_year: 2027,
+    source_url: 'https://inlandrail.com.au/building-inland-rail/progress/',
+    corridor: [
+      [-37.5116, 144.9918], [-36.7884, 145.0229], [-36.5351, 145.3558],
+      [-36.3748, 145.4329], [-36.1401, 145.6723], [-36.0737, 146.0558],
+      [-35.9800, 146.3000], [-35.7223, 146.9312], [-35.0270, 147.2280],
+      [-34.4766, 147.1869], [-33.8481, 147.2177], [-33.4157, 148.1790],
+    ],
+  },
+  {
+    project_name: 'Suburban Rail Loop East', project_code: 'SRL_EAST',
+    category: 'rail', status: 'under_construction',
+    freyssinet_opportunity:
+      'Station box excavations require ground anchoring and underpinning at road crossings. Cheltenham, Clayton, Monash, Glen Waverley, Burwood, Box Hill station boxes cross or pass beneath existing road bridges. Tunnel portal structures at Heatherton depot. Temporary works and shoring for TBM launch sites.',
+    budget_aud: 34_800_000_000, completion_year: 2035,
+    source_url: 'https://bigbuild.vic.gov.au/projects/suburban-rail-loop',
+    corridor: [
+      [-37.9530, 145.0577], [-37.9280, 145.0780], [-37.9100, 145.1150],
+      [-37.8768, 145.1630], [-37.8500, 145.1560], [-37.8197, 145.1230],
+    ],
+  },
+  {
+    project_name: 'Melbourne Airport Rail', project_code: 'AIRPORT_RAIL',
+    category: 'airport', status: 'under_construction',
+    freyssinet_opportunity:
+      'Three new rail bridges at Sunshine station as part of the 6km track realignment. West Footscray to Albion Rail Upgrade Stage 1. Flying junction structures. New Keilor East station bridge structures in future stages.',
+    budget_aud: 10_000_000_000, completion_year: 2030,
+    source_url: 'https://bigbuild.vic.gov.au/projects/melbourne-airport-rail',
+    corridor: [
+      [-37.8183, 144.9530], [-37.8029, 144.9019], [-37.7887, 144.8325],
+      [-37.7052, 144.8842], [-37.6710, 144.8530], [-37.6690, 144.8440],
+    ],
+  },
+  {
+    project_name: 'Next Generation Trams — G Class Routes 57,59,82', project_code: 'NGT_GCLASS',
+    category: 'tram', status: 'under_construction',
+    freyssinet_opportunity:
+      'Route infrastructure upgrades for 25m G Class trams on Routes 57 (Airport West), 59 (Flinders St to Airport West via CBD), 82 (Moonee Ponds). Overhead line structure upgrades, clearance works at road underpasses, stop platform raising, signal infrastructure at bridge locations. $72M allocated for enabling infrastructure.',
+    budget_aud: 1_850_000_000, completion_year: 2028,
+    source_url: 'https://transport.vic.gov.au/news-and-resources/projects/next-generation-trams-enabling-infrastructure-works',
+    corridor: [
+      [-37.8183, 144.9530], [-37.7980, 144.9351], [-37.7800, 144.9147],
+      [-37.7643, 144.8896], [-37.7454, 144.8790], [-37.7310, 144.8714],
+    ],
+  },
+  {
+    project_name: 'North East Link', project_code: 'NEL',
+    category: 'road', status: 'under_construction',
+    freyssinet_opportunity:
+      'Multiple bridge structures over Eastern Freeway and M80 interchange. Bulleen Road bridge widening. Fitsimons Lane bridge. Heidelberg Road overpass. Portal structures at tunnel entry/exit. Retaining wall post-tensioning.',
+    budget_aud: 15_800_000_000, completion_year: 2028,
+    source_url: 'https://bigbuild.vic.gov.au/projects/north-east-link',
+    corridor: [
+      [-37.7063, 145.1254], [-37.7352, 145.0932], [-37.7580, 145.0712],
+      [-37.7850, 145.0412], [-37.8050, 145.0200], [-37.8197, 145.0050],
+    ],
+  },
+];
 
-  let inserted = 0;
-  let skipped = 0;
-
-  try {
-    for (const c of companies) {
-      const r = await pool.query(
-        `INSERT INTO prequal_companies
-           (company_name, bridge_level, financial_level, financial_value, has_design, company_type)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (company_name) DO NOTHING
-         RETURNING id`,
-        [c.company_name, c.bridge_level, c.financial_level, c.financial_value, c.has_design, c.company_type],
-      );
-      if ((r.rowCount ?? 0) > 0) inserted++; else skipped++;
-    }
-    console.log(`[seed-prequal] inserted=${inserted} skipped=${skipped}`);
-    res.json({ success: true, inserted, skipped, total: companies.length });
-  } catch (err) {
-    console.error('[seed-prequal] error:', err);
-    res.status(500).json({ success: false, error: String(err) });
-  }
-});
-
-// GET /api/admin/run-prequal-match
-// Batch-computes bridge ↔ company eligibility and populates bridge_prequal_matches.
-// Uses a single SQL CROSS JOIN for efficiency across all 3,615 bridges × 17 companies.
-// Eligibility: company financial capacity >= bridge estimated project value
-//              AND company has a bridge contractor level OR is a design consultant.
-// Est values: Critical (sri>=80) = span*12000, High = span*6000,
-//             Moderate = span*2000, Low = 500000 (span default 30m if null).
-router.get('/run-prequal-match', async (_req: Request, res: Response): Promise<void> => {
-  try {
-    const result = await pool.query(`
-      INSERT INTO bridge_prequal_matches (bridge_id, company_id, match_type)
-      SELECT b.id, c.id, 'eligible'
-      FROM (
-        SELECT
-          id,
-          CASE
-            WHEN sri_score >= 80 THEN COALESCE(span_m, 30) * 12000
-            WHEN sri_score >= 60 THEN COALESCE(span_m, 30) * 6000
-            WHEN sri_score >= 40 THEN COALESCE(span_m, 30) * 2000
-            ELSE 500000
-          END AS est_value
-        FROM bridges
-      ) b
-      CROSS JOIN prequal_companies c
-      WHERE
-        (c.financial_value IS NULL OR c.financial_value * 1000000 >= b.est_value)
-        AND (c.bridge_level IS NOT NULL OR c.has_design = true)
-      ON CONFLICT (bridge_id, company_id) DO NOTHING
-    `);
-
-    const matched = result.rowCount ?? 0;
-    console.log(`[run-prequal-match] inserted ${matched} eligibility records`);
-    res.json({ success: true, matched });
-  } catch (err) {
-    console.error('[run-prequal-match] error:', err);
-    res.status(500).json({ success: false, error: String(err) });
-  }
-});
-
-// GET /api/admin/reset-street-view
-// Clears all stored street_view_url values so the next run-street-view
-// pass will re-check every bridge (useful after API key changes or
-// if imagery coverage has improved).
-router.get('/reset-street-view', async (_req: Request, res: Response): Promise<void> => {
-  try {
-    const result = await pool.query(
-      `UPDATE bridges SET street_view_url = NULL WHERE street_view_url IS NOT NULL`,
-    );
-    const resetCount = result.rowCount ?? 0;
-    console.log(`[reset-street-view] cleared street_view_url on ${resetCount} bridges`);
-    res.json({ success: true, reset: resetCount });
-  } catch (err) {
-    console.error('[reset-street-view] error:', err);
-    res.status(500).json({ success: false, error: String(err) });
-  }
-});
-
-// GET /api/admin/run-street-view
-// Batch-populates street_view_url for bridges that don't have one yet.
-// Checks the free metadata endpoint first, only sets the image URL when a
-// panorama actually exists (meta.status === 'OK').  Bridges with no coverage
-// are marked 'NONE' so they are not retried on the next run.
-// Processes the 100 highest-SRI bridges per run to keep costs predictable.
-router.get('/run-street-view', async (_req: Request, res: Response): Promise<void> => {
-  const apiKey = process.env['STREET_VIEW_API_KEY'];
-  if (!apiKey) {
-    res.status(500).json({ success: false, error: 'STREET_VIEW_API_KEY environment variable not set' });
-    return;
-  }
-
-  let processed = 0;
-  let found = 0;
-  let notFound = 0;
+router.get('/seed-future-projects', async (_req: Request, res: Response): Promise<void> => {
+  let inserted = 0; let updated = 0;
   const errors: string[] = [];
 
-  try {
-    const bridgesRes = await pool.query<{
-      id: string;
-      name: string;
-      latitude: number;
-      longitude: number;
-    }>(
-      `SELECT id, name, latitude, longitude
-       FROM bridges
-       WHERE street_view_url IS NULL
-         AND latitude IS NOT NULL
-         AND longitude IS NOT NULL
-       ORDER BY sri_score DESC
-       LIMIT 100`,
-    );
-
-    console.log(`[street-view] processing ${bridgesRes.rows.length} bridges`);
-
-    for (const bridge of bridgesRes.rows) {
-      const { id, name, latitude: lat, longitude: lng } = bridge;
-
-      const metaUrl =
-        `https://maps.googleapis.com/maps/api/streetview/metadata` +
-        `?location=${lat},${lng}&key=${apiKey}`;
-
-      try {
-        const metaResp = await fetch(metaUrl, {
-          headers: { 'User-Agent': 'VicBIP/1.0' },
-          signal: AbortSignal.timeout(10_000),
-        });
-
-        const meta = (await metaResp.json()) as { status: string };
-
-        if (meta.status === 'OK') {
-          const imageUrl =
-            `https://maps.googleapis.com/maps/api/streetview` +
-            `?size=640x320&location=${lat},${lng}&fov=90&pitch=0&key=${apiKey}`;
-          await pool.query(
-            'UPDATE bridges SET street_view_url = $1 WHERE id = $2',
-            [imageUrl, id],
-          );
-          found++;
-          console.log(`[street-view] found: ${name}`);
-        } else {
-          await pool.query(
-            "UPDATE bridges SET street_view_url = 'NONE' WHERE id = $1",
-            [id],
-          );
-          notFound++;
-        }
-      } catch (err) {
-        errors.push(`${name}: ${String(err).slice(0, 80)}`);
-      }
-
-      processed++;
-
-      // 100 ms between requests to avoid rate-limiting
-      await new Promise((r) => setTimeout(r, 100));
-    }
-
-    console.log(`[street-view] done: processed=${processed} found=${found} not_found=${notFound}`);
-    res.json({
-      success: true,
-      processed,
-      found,
-      not_found: notFound,
-      cost_estimate: '$' + (found * 0.007).toFixed(2),
-      errors: errors.length > 0 ? errors : undefined,
-    });
-  } catch (err) {
-    console.error('[street-view] fatal error:', err);
-    res.status(500).json({ success: false, error: String(err) });
+  for (const proj of FUTURE_PROJECTS) {
+    try {
+      const r = await pool.query<{ id: string; is_insert: boolean }>(
+        `INSERT INTO future_projects
+           (project_name,project_code,category,status,freyssinet_opportunity,budget_aud,completion_year,source_url)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         ON CONFLICT (project_name) DO UPDATE SET
+           project_code=EXCLUDED.project_code, category=EXCLUDED.category,
+           status=EXCLUDED.status, freyssinet_opportunity=EXCLUDED.freyssinet_opportunity,
+           budget_aud=EXCLUDED.budget_aud, completion_year=EXCLUDED.completion_year,
+           source_url=EXCLUDED.source_url
+         RETURNING id, (xmax=0) AS is_insert`,
+        [proj.project_name,proj.project_code,proj.category,proj.status,
+         proj.freyssinet_opportunity,proj.budget_aud,proj.completion_year,proj.source_url],
+      );
+      const row = r.rows[0]; if (!row) continue;
+      if (row.is_insert) inserted++; else updated++;
+      await pool.query('DELETE FROM future_project_corridors WHERE project_id=$1',[row.id]);
+      await pool.query(
+        'INSERT INTO future_project_corridors(project_id,segment_name,waypoints) VALUES($1,$2,$3::jsonb)',
+        [row.id, proj.project_name, JSON.stringify(proj.corridor)],
+      );
+    } catch (err) { errors.push(`${proj.project_name}: ${String(err).slice(0,80)}`); }
   }
+  console.log(`[seed-future-projects] inserted=${inserted} updated=${updated}`);
+  res.json({ success: true, inserted, updated, total: FUTURE_PROJECTS.length, errors: errors.length ? errors : undefined });
 });
 
-// POST /api/admin/add-tender — manual tender entry from the admin-direct form
-router.post('/add-tender', async (req: Request, res: Response): Promise<void> => {
-  const body = req.body as {
-    title?: unknown;
-    url?: unknown;
-    published_date?: unknown;
-    agency?: unknown;
-    status?: unknown;
-    value_aud?: unknown;
-    bridge_name?: unknown;
-    notes?: unknown;
-  };
-
-  const title = typeof body.title === 'string' ? body.title.trim() : '';
-  const url = typeof body.url === 'string' ? body.url.trim() : '';
-
-  if (!title || !url) {
-    res.status(400).json({ success: false, error: 'title and url are required' });
-    return;
-  }
-
-  const publishedDate = typeof body.published_date === 'string' && body.published_date ? body.published_date : null;
-  const agency = typeof body.agency === 'string' && body.agency ? body.agency : null;
-  const status = typeof body.status === 'string' && body.status ? body.status : 'open';
-  const valueAud = typeof body.value_aud === 'number' ? body.value_aud : null;
-  const notes = typeof body.notes === 'string' && body.notes ? body.notes : null;
-  const bridgeName = typeof body.bridge_name === 'string' && body.bridge_name ? body.bridge_name.trim() : null;
-
-  // Fuzzy-match bridge name via ILIKE
-  let bridgeMatched: { id: string; name: string } | null = null;
-  if (bridgeName) {
-    try {
-      const matchRes = await pool.query<{ id: string; name: string }>(
-        `SELECT id, name FROM bridges
-         WHERE LOWER(name) LIKE '%' || LOWER($1) || '%'
-         ORDER BY LENGTH(name) ASC
-         LIMIT 5`,
-        [bridgeName],
-      );
-      if (matchRes.rows.length > 0) {
-        bridgeMatched = matchRes.rows[0] ?? null;
-      }
-    } catch (err) {
-      console.warn('[admin] add-tender: bridge fuzzy-match failed:', err);
-    }
-  }
-
+router.get('/run-project-conflicts', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const insertRes = await pool.query<{ id: string }>(
-      `INSERT INTO bridge_tenders
-         (bridge_id, title, published_date, agency, status, value_aud, source, url, summary)
-       VALUES ($1, $2, $3, $4, $5, $6, 'manual', $7, $8)
-       ON CONFLICT (url) DO UPDATE SET
-         title       = EXCLUDED.title,
-         bridge_id   = COALESCE(EXCLUDED.bridge_id, bridge_tenders.bridge_id),
-         published_date = EXCLUDED.published_date,
-         agency      = EXCLUDED.agency,
-         status      = EXCLUDED.status,
-         value_aud   = EXCLUDED.value_aud,
-         summary     = EXCLUDED.summary
-       RETURNING id`,
-      [bridgeMatched?.id ?? null, title, publishedDate, agency, status, valueAud, url, notes],
+    await pool.query('DELETE FROM future_project_bridge_conflicts');
+    await pool.query('UPDATE bridges SET future_project_conflict=false WHERE future_project_conflict=true');
+
+    const corridorRes = await pool.query<{
+      id: string; project_id: string; waypoints: [number,number][];
+      freyssinet_opportunity: string | null;
+    }>(
+      `SELECT fpc.id,fpc.project_id,fpc.waypoints,fp.freyssinet_opportunity
+       FROM future_project_corridors fpc JOIN future_projects fp ON fp.id=fpc.project_id`,
     );
+    if (corridorRes.rows.length === 0) {
+      res.json({ success:true, message:'No corridors — run seed-future-projects first', conflicts_found:0 }); return;
+    }
 
-    const tenderId = (insertRes.rows[0] as { id: string } | undefined)?.id ?? null;
-    console.log(`[admin] add-tender: inserted/updated id=${tenderId} bridge=${bridgeMatched?.name ?? 'none'}`);
+    const bridgeRes = await pool.query<{ id:string; latitude:number; longitude:number }>(
+      'SELECT id,latitude::float,longitude::float FROM bridges WHERE latitude IS NOT NULL',
+    );
+    const bridges = bridgeRes.rows;
+    console.log(`[run-project-conflicts] checking ${bridges.length} bridges × ${corridorRes.rows.length} corridors`);
 
-    res.json({
-      success: true,
-      tender_id: tenderId,
-      bridge_matched: bridgeMatched ?? null,
-    });
+    let conflictsFound = 0;
+    const conflictedBridgeIds = new Set<string>();
+    const byProject = new Map<string, { crossing:number; adjacent:number; within_500m:number }>();
+
+    for (const corridor of corridorRes.rows) {
+      const waypoints = Array.isArray(corridor.waypoints) ? corridor.waypoints : [];
+      if (waypoints.length < 2) continue;
+
+      for (const bridge of bridges) {
+        const dist = distToCorridor(bridge.latitude, bridge.longitude, waypoints);
+        if (dist > 500) continue;
+        const conflictType = dist < 50 ? 'crossing' : dist < 200 ? 'adjacent' : 'within_500m';
+        try {
+          const r = await pool.query(
+            `INSERT INTO future_project_bridge_conflicts
+               (project_id,bridge_id,corridor_id,distance_m,conflict_type,opportunity)
+             VALUES ($1,$2,$3,$4,$5,$6)
+             ON CONFLICT (project_id,bridge_id) DO UPDATE SET
+               distance_m=LEAST(EXCLUDED.distance_m,future_project_bridge_conflicts.distance_m),
+               conflict_type=CASE WHEN EXCLUDED.distance_m<future_project_bridge_conflicts.distance_m
+                 THEN EXCLUDED.conflict_type ELSE future_project_bridge_conflicts.conflict_type END
+             RETURNING (xmax=0) AS is_insert`,
+            [corridor.project_id,bridge.id,corridor.id,Math.round(dist),conflictType,corridor.freyssinet_opportunity],
+          );
+          if ((r.rows[0] as {is_insert:boolean}|undefined)?.is_insert) conflictsFound++;
+          conflictedBridgeIds.add(bridge.id);
+          const p = byProject.get(corridor.project_id) ?? { crossing:0,adjacent:0,within_500m:0 };
+          p[conflictType as keyof typeof p]++;
+          byProject.set(corridor.project_id, p);
+        } catch { /* skip */ }
+      }
+    }
+
+    if (conflictedBridgeIds.size > 0) {
+      await pool.query('UPDATE bridges SET future_project_conflict=true WHERE id=ANY($1::uuid[])',[[...conflictedBridgeIds]]);
+    }
+    const projRes = await pool.query<{ id:string; project_name:string }>('SELECT id,project_name FROM future_projects');
+    const projNames = new Map(projRes.rows.map((r) => [r.id, r.project_name]));
+    const byProjectSummary = Array.from(byProject.entries()).map(([pid,counts]) => ({
+      project_name: projNames.get(pid) ?? pid, ...counts,
+    }));
+
+    console.log(`[run-project-conflicts] ${conflictsFound} conflicts on ${conflictedBridgeIds.size} bridges`);
+    res.json({ success:true, bridges_checked:bridges.length, conflicts_found:conflictsFound,
+               bridges_flagged:conflictedBridgeIds.size, by_project:byProjectSummary });
   } catch (err) {
-    console.error('[admin] add-tender failed:', err);
-    res.status(500).json({ success: false, error: String(err) });
+    console.error('[run-project-conflicts]', err);
+    res.status(500).json({ success:false, error:String(err) });
   }
 });
 

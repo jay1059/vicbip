@@ -28,6 +28,7 @@ function buildFilterParams(filters: BridgeFilters): URLSearchParams {
   if (filters.sn_only) params.set('sn_only', 'true');
   if (filters.has_tenders) params.set('has_tenders', 'true');
   if (filters.has_budget_allocation) params.set('has_budget_allocation', 'true');
+  if (filters.near_future_projects) params.set('near_future_projects', 'true');
 
   return params;
 }

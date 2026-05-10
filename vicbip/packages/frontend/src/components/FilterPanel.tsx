@@ -280,6 +280,25 @@ export function FilterPanel(): React.ReactElement {
           </div>
         </fieldset>
 
+        {/* Future Projects filter */}
+        <fieldset>
+          <legend className="section-header w-full">Future Projects</legend>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filters.near_future_projects ?? false}
+                onChange={(e) => filters.setNearFutureProjects(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              <span className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                <span className="text-purple-600 font-bold text-base leading-none">⚡</span>
+                Near future projects
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
         {/* Freyssinet toggles */}
         <fieldset>
           <legend className="section-header w-full">Freyssinet Works</legend>

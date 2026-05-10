@@ -1,6 +1,6 @@
 {
   "name": "vicbip",
-  "version": "1.1.7",
+  "version": "1.2.0",
   "private": true,
   "scripts": {
     "dev:frontend": "pnpm --filter frontend dev",
@@ -11,7 +11,6 @@
     "test": "pnpm --filter backend test"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2",
-    "only-allow": "^1.2.2"
+    "concurrently": "^8.2.2"
   }
 }

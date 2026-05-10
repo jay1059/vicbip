@@ -32,12 +32,12 @@ const DESIGN_LOAD_COLORS: Record<string, string> = {
 };
 
 const SERVICE_LINKS: Record<string, string> = {
-  'External Post-Tensioning': 'https://www.freyssinet.com.au/solution/build/post-tensioning/',
-  'CFRP Structural Strengthening': 'https://www.freyssinet.com.au/solution/repair/structural-strengthening/',
-  'Concrete Rehabilitation': 'https://www.freyssinet.com.au/solution/repair/concrete-rehabilitation/',
-  'Bearing Replacement': 'https://www.freyssinet.com.au/solution/repair/bearing-maintenance/',
-  'Expansion Joint Repair': 'https://www.freyssinet.com.au/solution/build/repair-and-maintenance-of-expansion-joints/',
-  'Seismic Retrofitting': 'https://www.freyssinet.com.au/solution/repair/seismic-retrofitting/',
+  'External Post-Tensioning': 'https://www.freyssinet.com.au/external-post-tensioning/',
+  'CFRP Structural Strengthening': 'https://www.freyssinet.com.au/frp-strengthening/',
+  'Concrete Rehabilitation': 'https://www.freyssinet.com.au/concrete-repair/',
+  'Bearing Replacement': 'https://www.freyssinet.com.au/structural-bearings/',
+  'Expansion Joint Repair': 'https://www.freyssinet.com.au/expansion-joints/',
+  'Seismic Retrofitting': 'https://www.freyssinet.com.au/seismic-protection/',
 };
 
 function Skeleton(): React.ReactElement {
@@ -101,9 +101,7 @@ function Section({
 }
 
 function SectionJCostMatrix({ bridge }: { bridge: BridgeDetail }): React.ReactElement {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const anyBridge = bridge as any;
-  const span: number = bridge.span_m ?? (anyBridge.span as number | null) ?? 30;
+  const span = bridge.span_m ?? 30;
 
   const col3CellStyle: React.CSSProperties = {
     backgroundColor: '#EFF6FF',
@@ -259,54 +257,6 @@ function SectionJCostMatrix({ bridge }: { bridge: BridgeDetail }): React.ReactEl
   );
 }
 
-function PrequalCompanyList({ companies }: { companies: import('@vicbip/shared').PrequalCompanySummary[] }): React.ReactElement {
-  const [expanded, setExpanded] = React.useState(false);
-  return (
-    <div>
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="text-xs text-brand-blue dark:text-blue-400 hover:underline flex items-center gap-1"
-        aria-expanded={expanded}
-      >
-        {expanded ? '▲' : '▼'} {expanded ? 'Hide' : `View all ${companies.length} eligible companies`}
-      </button>
-      {expanded && (
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700">
-                <th className="text-left py-1 pr-3 text-slate-500 font-medium">Company</th>
-                <th className="text-left py-1 pr-3 text-slate-500 font-medium">B-Level</th>
-                <th className="text-left py-1 pr-3 text-slate-500 font-medium">F-Level</th>
-                <th className="text-left py-1 text-slate-500 font-medium">Type</th>
-              </tr>
-            </thead>
-            <tbody>
-              {companies.map((c, i) => (
-                <tr
-                  key={i}
-                  className={`border-b border-slate-100 dark:border-slate-800 ${
-                    c.name.toLowerCase().includes('freyssinet')
-                      ? 'bg-blue-50/60 dark:bg-blue-900/10'
-                      : ''
-                  }`}
-                >
-                  <td className={`py-1 pr-3 font-medium ${c.name.toLowerCase().includes('freyssinet') ? 'text-brand-blue dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'}`}>
-                    {c.name}
-                  </td>
-                  <td className="py-1 pr-3 text-slate-600 dark:text-slate-400">{c.bridge_level ?? '—'}</td>
-                  <td className="py-1 pr-3 text-slate-600 dark:text-slate-400">{c.financial_level ?? '—'}</td>
-                  <td className="py-1 text-slate-500 dark:text-slate-500 capitalize">{c.type ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactElement {
   const [scoreExpanded, setScoreExpanded] = useState(false);
 
@@ -348,36 +298,6 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
           </span>
         </div>
       )}
-
-      {/* Mapbox satellite thumbnail — shown for every bridge with coordinates */}
-      {(() => {
-        const mbToken = import.meta.env['VITE_MAPBOX_TOKEN'] as string | undefined;
-        if (!mbToken || bridge.latitude == null || bridge.longitude == null) return null;
-        const mapThumb =
-          `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/` +
-          `pin-s+E8731A(${bridge.longitude},${bridge.latitude})/` +
-          `${bridge.longitude},${bridge.latitude},15,0/` +
-          `640x200@2x?access_token=${mbToken}`;
-        return (
-          <div className="relative">
-            <img
-              src={mapThumb}
-              alt={`Map location of ${bridge.name}`}
-              className="w-full object-cover"
-              style={{ height: '160px' }}
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-            <a
-              href={`https://www.google.com/maps?q=${bridge.latitude},${bridge.longitude}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="absolute bottom-2 right-2 text-xs bg-black/50 text-white px-2 py-1 rounded hover:bg-black/70 transition-colors"
-            >
-              Open in Google Maps ↗
-            </a>
-          </div>
-        );
-      })()}
 
       {/* Section A — Identity */}
       <div className="p-4 border-b border-slate-200 dark:border-slate-700">
@@ -674,83 +594,55 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
             </div>
           )}
 
-          {bridge.tenders.length > 0 ? (
+          {bridge.street_view_url && (
             <div className="mb-4">
-              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
-                Tender Activity ({bridge.tenders.length})
-              </h4>
-              <div className="space-y-3">
-                {bridge.tenders.map((tender) => {
-                  const statusLower = (tender.status ?? '').toLowerCase();
-                  const statusBadge =
-                    statusLower === 'open'
-                      ? { label: 'Open', cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' }
-                      : statusLower === 'closed'
-                      ? { label: 'Closed', cls: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' }
-                      : statusLower === 'awarded'
-                      ? { label: 'Awarded', cls: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300' }
-                      : null;
-
-                  return (
-                    <div
-                      key={tender.id}
-                      className="p-2.5 rounded border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40"
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        {tender.url ? (
-                          <a
-                            href={tender.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm font-medium text-brand-blue dark:text-blue-300 hover:underline leading-snug"
-                          >
-                            {tender.title}
-                          </a>
-                        ) : (
-                          <p className="text-sm font-medium text-slate-800 dark:text-slate-200 leading-snug">
-                            {tender.title}
-                          </p>
-                        )}
-                        {statusBadge && (
-                          <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${statusBadge.cls}`}>
-                            {statusBadge.label}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-500 space-y-0.5">
-                        {tender.agency && (
-                          <p className="text-slate-600 dark:text-slate-400">{tender.agency}</p>
-                        )}
-                        {tender.published_date && (
-                          <p>{new Date(tender.published_date).toLocaleDateString('en-AU')}</p>
-                        )}
-                        {tender.contractor && <p>Contractor: {tender.contractor}</p>}
-                        {tender.value_aud != null && (
-                          <p className="font-medium text-slate-700 dark:text-slate-300">
-                            Est. value: ${tender.value_aud.toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="mb-4 p-2.5 rounded border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40">
-              <p className="text-xs text-slate-500 dark:text-slate-400 italic">
-                No tender activity recorded. Check{' '}
-                <a
-                  href="https://www.tenders.vic.gov.au"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-brand-blue hover:underline"
-                >
-                  tenders.vic.gov.au
-                </a>
-              </p>
+              <img
+                src={bridge.street_view_url}
+                alt={`Street view of ${bridge.name}`}
+                className="w-full rounded object-cover"
+                style={{ height: 200 }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
             </div>
           )}
+
+          {bridge.tenders.length > 0 ? (
+            <div className="mb-4">
+              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
+                TENDERS ({bridge.tenders.length})
+              </h4>
+              <div className="space-y-3">
+                {bridge.tenders.map((tender) => (
+                  <div key={tender.id} className="text-sm">
+                    <p className="font-medium text-slate-800 dark:text-slate-200">
+                      {tender.title}
+                    </p>
+                    <div className="text-xs text-slate-500 space-y-0.5 mt-0.5">
+                      {tender.published_date && (
+                        <p>{new Date(tender.published_date).toLocaleDateString('en-AU')}</p>
+                      )}
+                      {tender.contractor && <p>Contractor: {tender.contractor}</p>}
+                      {tender.value_aud && (
+                        <p>Value: ${tender.value_aud.toLocaleString()}</p>
+                      )}
+                    </div>
+                    {tender.url && (
+                      <a
+                        href={tender.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-brand-blue hover:underline"
+                      >
+                        View source ↗
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {bridge.intelligence.length > 0 ? (
             <div className="space-y-3">
@@ -790,7 +682,7 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
               ))}
             </div>
           ) : (
-            bridge.tenders.length > 0 && (
+            bridge.tenders.length === 0 && (
               <p className="text-sm text-slate-500 dark:text-slate-400 italic">
                 No intelligence records yet. Consider running a manual search.
               </p>
@@ -856,175 +748,102 @@ function BridgePanelContent({ bridge }: { bridge: BridgeDetail }): React.ReactEl
         </Section>
       </div>
 
-      {/* Section H — Competitive Intelligence (Critical/High only) */}
+      {/* Section L — Future Project Proximity */}
       {(() => {
-        const tier = bridge.risk_tier?.toLowerCase();
-        const sri = bridge.sri_score ?? 0;
-        if (tier !== 'critical' && tier !== 'high' && sri < 60) return null;
-        const pq = bridge.prequal;
+        const conflicts = bridge.conflicts ?? [];
+        if (!bridge.future_project_conflict && conflicts.length === 0) return null;
+
+        const CATEGORY_COLORS: Record<string, string> = {
+          rail: '#DC2626', tram: '#D97706', road: '#059669', airport: '#2563EB',
+        };
+        const CONFLICT_LABEL: Record<string, string> = {
+          crossing: 'CROSSING', adjacent: 'ADJACENT', within_500m: 'WITHIN 500M',
+        };
+        const CONFLICT_CLS: Record<string, string> = {
+          crossing: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
+          adjacent: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+          within_500m: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300',
+        };
 
         return (
           <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-            <Section title="Competitive Intelligence">
-              {pq ? (
-                <div className="space-y-3">
-                  {/* Est value + contractor count row */}
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Estimated project value</p>
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                        {pq.est_value_range}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {/* Competitive density badge */}
-                      {(() => {
-                        const densityConfig = {
-                          low:    { label: 'Low competition',    cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' },
-                          medium: { label: 'Medium competition', cls: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' },
-                          high:   { label: 'High competition',   cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' },
-                        };
-                        const cfg = densityConfig[pq.competitive_density];
-                        return (
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${cfg.cls}`}>
-                            {cfg.label}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* Eligible counts */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-                      <p className="text-slate-500 dark:text-slate-400">Eligible contractors</p>
-                      <p className="text-base font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                        {pq.eligible_contractors}
-                      </p>
-                    </div>
-                    <div className="p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-                      <p className="text-slate-500 dark:text-slate-400">Eligible consultants</p>
-                      <p className="text-base font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                        {pq.eligible_consultants}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Freyssinet eligible badge */}
-                  {pq.freyssinet_eligible && (
-                    <div className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 border border-brand-blue/20 text-brand-blue dark:text-blue-300 px-3 py-1 rounded-full text-xs font-semibold">
-                      <span aria-hidden="true">✓</span> Freyssinet Eligible B3/F25
-                    </div>
-                  )}
-
-                  {/* Expandable company list */}
-                  <PrequalCompanyList companies={pq.companies} />
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500 dark:text-slate-400 italic">
-                  No prequalification data. Run{' '}
+            <Section title="Future Project Proximity">
+              {conflicts.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400 italic">
+                  Conflict data loading — run{' '}
                   <span className="font-medium text-slate-600 dark:text-slate-300">
-                    Seed Prequal
+                    Run Conflict Detection
                   </span>{' '}
-                  then{' '}
-                  <span className="font-medium text-slate-600 dark:text-slate-300">
-                    Run Prequal Match
-                  </span>{' '}
-                  in admin.
+                  in admin panel.
                 </p>
+              ) : (
+                <div className="space-y-3">
+                  {conflicts.map((c, i) => {
+                    const catColor = CATEGORY_COLORS[c.category ?? ''] ?? '#9CA3AF';
+                    const conflictCls = CONFLICT_CLS[c.conflict_type ?? ''] ?? CONFLICT_CLS['within_500m']!;
+                    const conflictLabel = CONFLICT_LABEL[c.conflict_type ?? ''] ?? 'NEARBY';
+                    const opp = c.opportunity ?? '';
+                    const oppShort = opp.length > 150 ? opp.slice(0, 150) + '…' : opp;
+
+                    return (
+                      <div
+                        key={i}
+                        className="p-3 rounded border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="shrink-0 text-xs font-bold px-2 py-0.5 rounded text-white"
+                              style={{ backgroundColor: catColor }}
+                            >
+                              {(c.category ?? 'project').toUpperCase()}
+                            </span>
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 leading-snug truncate">
+                              {c.project_name}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${conflictCls}`}>
+                            {conflictLabel}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+                          {Math.round(c.distance_m)}m from corridor
+                          {c.completion_year ? ` · Est. completion ${c.completion_year}` : ''}
+                        </p>
+
+                        {opp && (
+                          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-1.5">
+                            {oppShort}
+                          </p>
+                        )}
+
+                        {c.source_url && (
+                          <a
+                            href={c.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-brand-blue hover:underline"
+                          >
+                            Project details ↗
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </Section>
           </div>
         );
       })()}
 
-      {/* Section K — Budget & Funding Signals (all bridges) */}
-      {(() => {
-        const hasBudget = bridge.has_budget_allocation && bridge.budget && bridge.budget.length > 0;
-        const isSlripEligible =
-          bridge.owner_category === 'local_govt' &&
-          bridge.sri_score >= 40 &&
-          (bridge.construction_year ?? 2000) <= 1985;
-
-        if (!hasBudget && !isSlripEligible) return null;
-
-        const fmtAud = (v: number) =>
-          v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(0)}M` : `$${Math.round(v / 1000)}K`;
-
-        return (
-          <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-            <Section title="Budget & Funding Signals">
-              <div className="space-y-3">
-                {/* SLRIP eligibility banner */}
-                {isSlripEligible && (
-                  <div className="p-3 rounded border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 uppercase tracking-wide">
-                        SLRIP Eligible
-                      </span>
-                    </div>
-                    <p className="text-xs text-amber-800 dark:text-amber-200">
-                      This bridge may qualify for federal{' '}
-                      <span className="font-semibold">Safer Local Roads and Infrastructure Program</span>{' '}
-                      funding.
-                    </p>
-                  </div>
-                )}
-
-                {/* Confirmed budget allocation cards */}
-                {hasBudget && bridge.budget!.map((alloc) => (
-                  <div
-                    key={alloc.id}
-                    className="p-3 rounded border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/10"
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 uppercase tracking-wide">
-                        FUNDED {alloc.financial_year ?? ''}
-                      </span>
-                      {alloc.amount_aud != null && (
-                        <span className="text-sm font-bold text-green-700 dark:text-green-300">
-                          {fmtAud(alloc.amount_aud)}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                      {alloc.program_name}
-                    </p>
-                    {alloc.funding_body && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        {alloc.funding_body}
-                      </p>
-                    )}
-                    {alloc.source_url && (
-                      <a
-                        href={alloc.source_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-brand-blue hover:underline mt-1 inline-block"
-                      >
-                        Budget source ↗
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Section>
-          </div>
-        );
-      })()}
-
-      {/* Section J — Asset Owner Decision Framework */}
-      {(() => {
-        const tier = bridge.risk_tier?.toLowerCase();
-        const sri = bridge.sri_score ?? 0;
-        const show = tier === 'critical' || tier === 'high' || sri >= 60;
-        if (!show) return null;
-        return (
-          <div className="p-4">
-            <SectionJCostMatrix bridge={bridge} />
-          </div>
-        );
-      })()}
+      {/* Section J — Asset Owner Decision Framework (critical/high only) */}
+      {(bridge.risk_tier === 'critical' || bridge.risk_tier === 'high') && (
+        <div className="p-4">
+          <SectionJCostMatrix bridge={bridge} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1033,28 +852,6 @@ export function BridgePanel(): React.ReactElement {
   const { selectedBridgeId, setSelectedBridgeId } = useAppStore();
   const isOpen = !!selectedBridgeId;
 
-const [panelWidth, setPanelWidth] = React.useState(520);
-const isResizing = React.useRef(false);
-
-const startResize = (e: React.MouseEvent) => {
-  isResizing.current = true;
-  const startX = e.clientX;
-  const startWidth = panelWidth;
-  const onMouseMove = (e: MouseEvent) => {
-    if (!isResizing.current) return;
-    const delta = startX - e.clientX;
-    const newWidth = Math.min(800, Math.max(360, startWidth + delta));
-    setPanelWidth(newWidth);
-  };
-  const onMouseUp = () => {
-    isResizing.current = false;
-    window.removeEventListener('mousemove', onMouseMove);
-    window.removeEventListener('mouseup', onMouseUp);
-  };
-  window.addEventListener('mousemove', onMouseMove);
-  window.addEventListener('mouseup', onMouseUp);
-};
-  
   const { data: bridge, isLoading, error } = useQuery({
     queryKey: ['bridge', selectedBridgeId],
     queryFn: () => fetchBridgeDetail(selectedBridgeId!),
@@ -1062,20 +859,13 @@ const startResize = (e: React.MouseEvent) => {
   });
 
   return (
- <aside
-  className={`fixed top-14 right-0 bottom-8 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 z-20 flex flex-col shadow-2xl transition-transform duration-300 ${
-    isOpen ? 'translate-x-0' : 'translate-x-full'
-  }`}
-  style={{ width: `${panelWidth}px`, minWidth: '360px', maxWidth: '800px' }}
-  aria-label="Bridge detail panel"
-  aria-hidden={!isOpen}
->
-  {/* Drag handle */}
-  <div
-    onMouseDown={startResize}
-    className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 transition-colors z-30"
-    title="Drag to resize panel"
-  />
+    <aside
+      className={`fixed top-14 right-0 bottom-8 w-[420px] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 z-20 flex flex-col shadow-2xl transition-transform duration-300 ${
+        isOpen ? 'translate-x-0' : 'translate-x-full'
+      }`}
+      aria-label="Bridge detail panel"
+      aria-hidden={!isOpen}
+    >
       {isOpen && (
         <>
           {/* Panel Header */}

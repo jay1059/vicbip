@@ -37,20 +37,7 @@ export interface Bridge {
   notes: string | null;
   last_ingested: string;
   has_budget_allocation: boolean;
-}
-
-export interface BudgetAllocation {
-  id: string;
-  bridge_id: string | null;
-  program_name: string;
-  funding_tier: string | null;
-  funding_body: string | null;
-  amount_aud: number | null;
-  financial_year: string | null;
-  structure_named: string | null;
-  status: string | null;
-  source_url: string | null;
-  created_at: string;
+  future_project_conflict: boolean;
 }
 
 export interface GeoJSONPoint {
@@ -132,6 +119,7 @@ export interface BridgeFeatureProperties {
   is_sn: boolean;
   has_tenders: boolean;
   has_budget_allocation: boolean;
+  future_project_conflict: boolean;
 }
 
 export interface BridgeGeoJSONFeature {
@@ -143,6 +131,20 @@ export interface BridgeGeoJSONFeature {
 export interface BridgeGeoJSONCollection {
   type: 'FeatureCollection';
   features: BridgeGeoJSONFeature[];
+}
+
+export interface BudgetAllocation {
+  id: string;
+  bridge_id: string | null;
+  program_name: string;
+  funding_tier: string | null;
+  funding_body: string | null;
+  amount_aud: number | null;
+  financial_year: string | null;
+  structure_named: string | null;
+  status: string | null;
+  source_url: string | null;
+  created_at: string;
 }
 
 export interface PrequalCompanySummary {
@@ -161,6 +163,18 @@ export interface BridgePrequal {
   freyssinet_eligible: boolean;
 }
 
+export interface FutureProjectConflict {
+  project_name: string;
+  project_code: string | null;
+  category: string | null;
+  status: string | null;
+  distance_m: number;
+  conflict_type: string | null;
+  opportunity: string | null;
+  completion_year: number | null;
+  source_url: string | null;
+}
+
 export interface BridgeDetail extends Bridge {
   traffic: BridgeTraffic | null;
   crash_summary: BridgeCrashSummary | null;
@@ -170,6 +184,7 @@ export interface BridgeDetail extends Bridge {
   solution_match: string[];
   prequal: BridgePrequal | null;
   budget: BudgetAllocation[];
+  conflicts: FutureProjectConflict[];
 }
 
 export interface BridgeStats {
@@ -195,15 +210,6 @@ export interface BridgeStats {
   }>;
 }
 
-export interface NewsArticle {
-  title: string;
-  url: string;
-  snippet: string;
-  source: string;
-  published: string;
-  image_url: string | null;
-}
-
 export interface BridgeFilters {
   owner_category?: OwnerCategory[];
   risk_tier?: RiskTier[];
@@ -217,4 +223,14 @@ export interface BridgeFilters {
   sn_only?: boolean;
   has_tenders?: boolean;
   has_budget_allocation?: boolean;
+  near_future_projects?: boolean;
+}
+
+export interface NewsArticle {
+  title: string;
+  url: string;
+  snippet: string;
+  source: string;
+  published: string;
+  image_url: string | null;
 }

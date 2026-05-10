@@ -148,24 +148,52 @@ export function MapView(): React.ReactElement {
         },
       });
 
-      // Budget allocation badge — green '$' symbol above funded bridge markers
+      // ⚡ Future project conflict badge (purple, shown above circles)
       map.addLayer({
-        id: 'budget-badge',
+        id: 'future-conflict-badge',
         type: 'symbol',
         source: 'bridges',
-        filter: ['==', ['get', 'has_budget_allocation'], true],
+        filter: ['==', ['get', 'future_project_conflict'], true],
         layout: {
-          'text-field': '$',
-          'text-size': 14,
-          'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
-          'text-offset': [0.8, -0.8],
+          'text-field': '⚡',
+          'text-size': 12,
+          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
+          'text-offset': [-0.8, -0.8],
         },
+        paint: { 'text-color': '#7C3AED' },
+      });
+
+      // Future project corridor lines — fetched from /api/content/future-projects
+      map.addSource('future-corridors', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'future-project-corridors',
+        type: 'line',
+        source: 'future-corridors',
         paint: {
-          'text-color': '#16A34A',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1,
+          'line-color': ['match', ['get', 'category'],
+            'rail', '#DC2626',
+            'tram', '#D97706',
+            'road', '#059669',
+            'airport', '#2563EB',
+            '#9CA3AF',
+          ],
+          'line-width': 3,
+          'line-dasharray': [4, 2],
+          'line-opacity': 0.7,
         },
       });
+
+      // Load corridor GeoJSON (non-fatal if endpoint not yet available)
+      fetch('/api/content/future-projects')
+        .then((r) => r.json())
+        .then((geojson: unknown) => {
+          const src = map.getSource('future-corridors') as mapboxgl.GeoJSONSource | undefined;
+          src?.setData(geojson as GeoJSON.FeatureCollection);
+        })
+        .catch(() => { /* endpoint not yet seeded */ });
 
       mapRef.current = map;
 
@@ -258,9 +286,6 @@ export function MapView(): React.ReactElement {
     map.setLayoutProperty('bridge-heatmap', 'visibility', showHeat);
     map.setLayoutProperty('bridge-points', 'visibility', showPoints);
     map.setLayoutProperty('bridge-points-tender', 'visibility', showPoints);
-    if (map.getLayer('budget-badge')) {
-      map.setLayoutProperty('budget-badge', 'visibility', showPoints);
-    }
 
     // Pause/resume pulse RAF
     if (isHeatmapEnabled) {
@@ -339,9 +364,23 @@ export function MapView(): React.ReactElement {
           <span className="text-xs text-slate-500 dark:text-slate-400">SN bridge</span>
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-green-600 font-bold text-sm leading-none w-3 text-center" aria-hidden="true">$</span>
-          <span className="text-xs text-slate-500 dark:text-slate-400">Budget allocation</span>
+          <span className="text-sm leading-none text-purple-600" aria-hidden="true">⚡</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">Near future project</span>
         </div>
+        <p className="text-[10px] font-semibold text-slate-400 mt-2 mb-1 uppercase tracking-wide">Project Corridors</p>
+        {[
+          { label: 'Rail', color: '#DC2626' },
+          { label: 'Tram', color: '#D97706' },
+          { label: 'Road', color: '#059669' },
+          { label: 'Airport', color: '#2563EB' },
+        ].map(({ label, color }) => (
+          <div key={label} className="flex items-center gap-2 mb-0.5">
+            <svg width="20" height="6" aria-hidden="true">
+              <line x1="0" y1="3" x2="20" y2="3" stroke={color} strokeWidth="2.5" strokeDasharray="5,2" />
+            </svg>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
