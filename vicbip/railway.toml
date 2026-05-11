@@ -1,0 +1,8 @@
+[build]
+builder = "RAILPACK"
+buildCommand = "pnpm install --no-frozen-lockfile && pnpm run build"
+
+[deploy]
+startCommand = "node packages/backend/dist/index.js"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
